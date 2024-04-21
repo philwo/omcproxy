@@ -28,6 +28,12 @@
 
 #include "client.h"
 
+// Unmap IPv4 address
+void client_unmap(struct in_addr* addr4,
+                  const struct in6_addr* addr6) {
+  addr4->s_addr = addr6->s6_addr32[3];
+}
+
 // Add / update / remove a client entry for a multicast group
 int client_set(struct client* client,
                const struct in6_addr* group,

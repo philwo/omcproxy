@@ -204,12 +204,6 @@ int igmp_send_query(struct querier_iface* q,
   size_t cnt = 0;
   if (sources) {
     list_for_each_entry(s, sources, head) {
-      if (cnt >= QUERIER_MAX_SOURCE) {
-        L_WARN("%s: maximum source count (%d) exceeded", __FUNCTION__,
-               QUERIER_MAX_SOURCE);
-        break;
-      }
-
       query.q.srcs[cnt] = querier_unmap(&s->addr);
     }
   }

@@ -18,12 +18,11 @@
  */
 
 #pragma once
+
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include "omcproxy.h"
-
-#define PROXY_MAX_SOURCES 1000
 
 struct client {
   int igmp_fd;
@@ -45,7 +44,4 @@ int client_set(struct client* client,
                size_t cnt);
 
 // Unmap IPv4 address
-static inline void client_unmap(struct in_addr* addr4,
-                                const struct in6_addr* addr6) {
-  addr4->s_addr = addr6->s6_addr32[3];
-}
+void client_unmap(struct in_addr* addr4, const struct in6_addr* addr6);

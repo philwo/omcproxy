@@ -17,25 +17,11 @@
  *
  */
 
-#ifndef OMCPROXY_H_
-#define OMCPROXY_H_
+#pragma once
 
 #ifndef L_PREFIX
 #define L_PREFIX ""
 #endif /* !L_PREFIX */
-
-#ifdef __APPLE__
-
-#define __APPLE_USE_RFC_3542
-#define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
-#define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
-
-#include <sys/queue.h>
-#ifdef LIST_HEAD
-#undef LIST_HEAD
-#endif /* LIST_HEAD */
-
-#endif /* __APPLE__ */
 
 #include <libubox/utils.h>
 #include <stddef.h>
@@ -44,21 +30,13 @@
 #include <syslog.h>
 #include <time.h>
 
-#define STR_EXPAND(tok) #tok
-#define STR(tok) STR_EXPAND(tok)
-
 typedef int64_t omcp_time_t;
 #define OMCP_TIME_MAX INT64_MAX
 #define OMCP_TIME_PER_SECOND INT64_C(1000)
 
-static inline omcp_time_t omcp_time(void) {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return ((omcp_time_t)ts.tv_sec * OMCP_TIME_PER_SECOND) +
-         ((omcp_time_t)ts.tv_nsec / (1000000000 / OMCP_TIME_PER_SECOND));
-}
-
 extern int log_level;
+
+omcp_time_t omcp_time(void);
 
 // Logging macros
 
@@ -73,5 +51,3 @@ extern int log_level;
 #define L_NOTICE(...) L_INTERNAL(LOG_NOTICE, __VA_ARGS__)
 #define L_INFO(...) L_INTERNAL(LOG_INFO, __VA_ARGS__)
 #define L_DEBUG(...) L_INTERNAL(LOG_DEBUG, __VA_ARGS__)
-
-#endif /* OMCPROXY_H_ */

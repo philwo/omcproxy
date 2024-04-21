@@ -22,7 +22,8 @@
 #include <string.h>
 
 // Group comparator for AVL-tree
-static int compare_groups(const void* k1, const void* k2, void* ptr) {
+static int compare_groups(const void* k1, const void* k2,
+                          __attribute__((unused)) void* ptr) {
   return memcmp(k1, k2, sizeof(struct in6_addr));
 }
 

@@ -43,6 +43,13 @@ static struct blobmsg_policy proxy_policy[PROXY_ATTR_MAX] = {
     [PROXY_ATTR_DEST] = {.name = "dest", .type = BLOBMSG_TYPE_ARRAY},
 };
 
+omcp_time_t omcp_time(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ((omcp_time_t)ts.tv_sec * OMCP_TIME_PER_SECOND) +
+         ((omcp_time_t)ts.tv_nsec / (1000000000 / OMCP_TIME_PER_SECOND));
+}
+
 static int handle_proxy_set(void* data, size_t len) {
   struct blob_attr *tb[PROXY_ATTR_MAX], *c;
   blobmsg_parse(proxy_policy, PROXY_ATTR_MAX, tb, data, len);
