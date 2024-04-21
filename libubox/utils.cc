@@ -28,8 +28,7 @@ int mkdir_p(char* dir, mode_t mask) {
   if (!ret || errno == EEXIST) {
     return 0;
   }
-
-  if (ret && (errno != ENOENT)) {
+  if (errno != ENOENT) {
     return -1;
   }
 

@@ -29,26 +29,19 @@
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
 
-#define __constant_swap16(x)                               \
-  ((uint16_t)((((uint16_t)(x) & (uint16_t)0x00ffU) << 8) | \
-              (((uint16_t)(x) & (uint16_t)0xff00U) >> 8)))
-
-#define __constant_swap32(x)                                     \
+#define constant_swap32(x)                                     \
   ((uint32_t)((((uint32_t)(x) & (uint32_t)0x000000ffUL) << 24) | \
               (((uint32_t)(x) & (uint32_t)0x0000ff00UL) << 8) |  \
               (((uint32_t)(x) & (uint32_t)0x00ff0000UL) >> 8) |  \
               (((uint32_t)(x) & (uint32_t)0xff000000UL) >> 24)))
 
-#define __eval_once(func, x) \
+#define eval_once(func, x) \
   ({                         \
     __typeof__(x) __x = x;   \
     func(__x);               \
   })
 
-#define cpu_to_be32(x) __eval_once(__constant_swap32, x)
-#define cpu_to_be16(x) __eval_once(__constant_swap16, x)
-
-#define be32_to_cpu(x) __eval_once(__constant_swap32, x)
-#define be16_to_cpu(x) __eval_once(__constant_swap16, x)
+#define cpu_to_be32(x) eval_once(constant_swap32, x)
+#define be32_to_cpu(x) eval_once(constant_swap32, x)
 
 int mkdir_p(char* dir, mode_t mask);

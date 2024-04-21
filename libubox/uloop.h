@@ -86,7 +86,7 @@ extern uloop_fd_handler uloop_fd_set_cb;
 int uloop_fd_add(struct uloop_fd* sock, unsigned int flags);
 int uloop_fd_delete(struct uloop_fd* sock);
 
-int uloop_get_next_timeout(void);
+int uloop_get_next_timeout();
 int uloop_timeout_add(struct uloop_timeout* timeout);
 int uloop_timeout_set(struct uloop_timeout* timeout, time_t msecs);
 int uloop_timeout_cancel(struct uloop_timeout* timeout);
@@ -94,9 +94,9 @@ int64_t uloop_timeout_remaining64(struct uloop_timeout* timeout);
 
 int uloop_process_delete(struct uloop_process* p);
 
-void uloop_end(void);
+void uloop_end();
 
-int uloop_init(void);
+int uloop_init();
 int uloop_run_timeout(int timeout);
-int uloop_run(void);
-void uloop_done(void);
+int uloop_run();
+void uloop_done();
