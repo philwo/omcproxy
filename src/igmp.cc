@@ -18,7 +18,7 @@
  */
 
 #include <netinet/in.h>
-#include <string.h>
+#include <cstring>
 #include <sys/socket.h>
 
 #include "querier.h"
@@ -32,7 +32,7 @@ static bool igmp_is_valid_group(in_addr_t group) {
 static ssize_t igmp_handle_record(struct groups* groups,
                                   const uint8_t* data,
                                   size_t len) {
-  struct igmpv3_grec* r = (struct igmpv3_grec*)data;
+  auto* r = (struct igmpv3_grec*)data;
 
   if (len < sizeof(*r)) {
     return -1;
@@ -48,14 +48,15 @@ static ssize_t igmp_handle_record(struct groups* groups,
 
   if (r->grec_type >= UPDATE_IS_INCLUDE && r->grec_type <= UPDATE_BLOCK &&
       igmp_is_valid_group(r->grec_mca)) {
-    struct in6_addr addr, sources[nsrc];
+    struct in6_addr addr{}, sources[nsrc];
     querier_map(&addr, r->grec_mca);
 
     for (size_t i = 0; i < nsrc; ++i) {
       querier_map(&sources[i], r->grec_src[i]);
     }
 
-    groups_update_state(groups, &addr, sources, nsrc, r->grec_type);
+    groups_update_state(groups, &addr, sources, nsrc,
+                        static_cast<groups_update>(r->grec_type));
   }
 
   return read;
@@ -69,13 +70,13 @@ void igmp_handle(struct mrib_querier* mrib,
   struct querier_iface* q = container_of(mrib, struct querier_iface, mrib);
   omcp_time_t now = omcp_time();
   char addrbuf[INET_ADDRSTRLEN];
-  struct in6_addr group;
+  struct in6_addr group{};
 
   querier_map(&group, igmp->group);
   inet_ntop(AF_INET, &from->sin_addr, addrbuf, sizeof(addrbuf));
 
   if (igmp->type == IGMP_HOST_MEMBERSHIP_QUERY) {
-    struct igmpv3_query* query = (struct igmpv3_query*)igmp;
+    auto* query = (struct igmpv3_query*)igmp;
 
     if (len != sizeof(*igmp) &&
         ((size_t)len < sizeof(*query) ||
@@ -89,7 +90,7 @@ void igmp_handle(struct mrib_querier* mrib,
     }
 
     // Setup query target address
-    struct in_addr addr;
+    struct in_addr addr{};
     if (mrib_igmp_source(mrib, &addr)) {
       return;
     }
@@ -143,13 +144,13 @@ void igmp_handle(struct mrib_querier* mrib,
           (q->groups.cfg_v4.robustness * q->groups.cfg_v4.query_interval);
     }
   } else if (igmp->type == IGMPV3_HOST_MEMBERSHIP_REPORT) {
-    struct igmpv3_report* report = (struct igmpv3_report*)igmp;
+    auto* report = (struct igmpv3_report*)igmp;
 
     if ((size_t)len <= sizeof(*report)) {
       return;
     }
 
-    uint8_t* ibuf = (uint8_t*)igmp;
+    auto* ibuf = (uint8_t*)igmp;
     size_t count = ntohs(report->ngrec);
     size_t offset = sizeof(*report);
 
@@ -171,7 +172,7 @@ void igmp_handle(struct mrib_querier* mrib,
     }
 
     groups_update_state(
-        &q->groups, &group, NULL, 0,
+        &q->groups, &group, nullptr, 0,
         (igmp->type == IGMPV2_HOST_MEMBERSHIP_REPORT) ? UPDATE_REPORT
         : (igmp->type == IGMP_HOST_MEMBERSHIP_REPORT) ? UPDATE_REPORT_V1
                                                       : UPDATE_DONE);

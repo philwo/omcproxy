@@ -49,7 +49,7 @@ struct groups_config {
   omcp_time_t query_response_interval;
   omcp_time_t query_interval;
   omcp_time_t last_listener_query_interval;
-  int robustness;
+  uint8_t robustness;
   int last_listener_query_count;
 };
 
@@ -59,7 +59,6 @@ struct groups {
   struct avl_tree groups;
   struct uloop_timeout timer;
   size_t source_limit;
-  size_t group_limit;
   void (*cb_query)(struct groups* g,
                    const struct in6_addr* addr,
                    const struct list_head* sources,
@@ -70,8 +69,9 @@ struct groups {
 void groups_init(struct groups* groups);
 void groups_deinit(struct groups* groups);
 
+
 enum groups_update {
-  UPDATE_UNSPEC,
+  UPDATE_NONE = 0,
   UPDATE_IS_INCLUDE = 1,
   UPDATE_IS_EXCLUDE = 2,
   UPDATE_TO_IN = 3,
@@ -102,8 +102,6 @@ void groups_update_state(struct groups* groups,
                          size_t len,
                          enum groups_update update);
 
-void groups_synthesize_events(struct groups* groups);
-
 // Groups user query API
 
 bool group_is_included(const struct group* group, omcp_time_t time);
@@ -121,8 +119,6 @@ bool source_is_included(const struct group_source* source, omcp_time_t time);
                       head) if (source_is_included(source, time) == \
                                 group_is_included(group, time))
 
-const struct group* groups_get(struct groups* groups,
-                               const struct in6_addr* addr);
 bool groups_includes_group(struct groups* groups,
                            const struct in6_addr* addr,
                            const struct in6_addr* src,

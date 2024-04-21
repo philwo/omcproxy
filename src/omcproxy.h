@@ -24,11 +24,11 @@
 #endif /* !L_PREFIX */
 
 #include <libubox/utils.h>
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 #include <sys/types.h>
 #include <syslog.h>
-#include <time.h>
+#include <ctime>
 
 typedef int64_t omcp_time_t;
 #define OMCP_TIME_MAX INT64_MAX
@@ -36,7 +36,7 @@ typedef int64_t omcp_time_t;
 
 extern long log_level;
 
-omcp_time_t omcp_time(void);
+omcp_time_t omcp_time();
 
 // Logging macros
 
@@ -48,6 +48,5 @@ omcp_time_t omcp_time(void);
 
 #define L_ERR(...) L_INTERNAL(LOG_ERR, __VA_ARGS__)
 #define L_WARN(...) L_INTERNAL(LOG_WARNING, __VA_ARGS__)
-#define L_NOTICE(...) L_INTERNAL(LOG_NOTICE, __VA_ARGS__)
 #define L_INFO(...) L_INTERNAL(LOG_INFO, __VA_ARGS__)
 #define L_DEBUG(...) L_INTERNAL(LOG_DEBUG, __VA_ARGS__)

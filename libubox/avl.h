@@ -63,7 +63,7 @@ struct avl_node {
   struct list_head list;
 
   /**
-   * Pointer to parent node in tree, NULL if root node
+   * Pointer to parent node in tree, nullptr if root node
    */
   struct avl_node* parent;
 
@@ -114,7 +114,7 @@ struct avl_tree {
   struct list_head list_head;
 
   /**
-   * pointer to the root node of the avl tree, NULL if tree is empty
+   * pointer to the root node of the avl tree, nullptr if tree is empty
    */
   struct avl_node* root;
 
@@ -167,7 +167,7 @@ void EXPORT(avl_delete)(struct avl_tree*, struct avl_node*);
  * @param key pointer to key
  * @param offset offset of node inside the embedded struct
  * @param mode mode of lookup operation (less equal, equal or greater equal)
- * @param pointer to elemen, NULL if no fitting one was found
+ * @param pointer to elemen, nullptr if no fitting one was found
  */
 void* __avl_find_element(const struct avl_tree* tree,
                          const void* key,
@@ -182,7 +182,7 @@ void* __avl_find_element(const struct avl_tree* tree,
  * @param node_element name of the avl_node element inside the
  *    larger struct
  * @return pointer to tree element with the specified key,
- *    NULL if no element was found
+ *    nullptr if no element was found
  */
 #define avl_find_element(tree, key, element, node_element) \
   ((__typeof__(*(element))*)__avl_find_element(            \

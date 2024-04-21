@@ -18,7 +18,7 @@
  */
 
 #include <arpa/inet.h>
-#include <stdlib.h>
+#include <cstdlib>
 #include <sys/socket.h>
 
 #include <netinet/icmp6.h>
@@ -65,7 +65,8 @@ static ssize_t mld_handle_record(struct groups* groups,
 
   if (r->type >= UPDATE_IS_INCLUDE && r->type <= UPDATE_BLOCK &&
       mld_is_valid_group(&r->addr)) {
-    groups_update_state(groups, &r->addr, r->sources, nsrc, r->type);
+    groups_update_state(groups, &r->addr, r->sources, nsrc,
+                        static_cast<groups_update>(r->type));
   }
 
   return read;
@@ -82,7 +83,7 @@ void mld_handle(struct mrib_querier* mrib,
 
   struct querier_iface* q = container_of(mrib, struct querier_iface, mrib);
   if (hdr->mld_icmp6_hdr.icmp6_type == ICMPV6_MGM_QUERY) {
-    struct mld_query* query = (struct mld_query*)hdr;
+    auto* query = (struct mld_query*)hdr;
 
     if (len != 24 &&
         ((size_t)len < sizeof(*query) ||
@@ -97,7 +98,7 @@ void mld_handle(struct mrib_querier* mrib,
     }
 
     // Detect local source address
-    struct in6_addr addr;
+    struct in6_addr addr{};
     if (mrib_mld_source(mrib, &addr)) {
       return;
     }
@@ -148,12 +149,12 @@ void mld_handle(struct mrib_querier* mrib,
           (q->groups.cfg_v6.robustness * q->groups.cfg_v6.query_interval);
     }
   } else if (hdr->mld_icmp6_hdr.icmp6_type == ICMPV6_MLD2_REPORT) {
-    struct icmp6_hdr* mld_report = (struct icmp6_hdr*)hdr;
+    auto* mld_report = (struct icmp6_hdr*)hdr;
     if ((size_t)len <= sizeof(*mld_report)) {
       return;
     }
 
-    uint8_t* buf = (uint8_t*)hdr;
+    auto* buf = (uint8_t*)hdr;
     size_t count = ntohs(mld_report->icmp6_dataun.icmp6_un_data16[1]);
     ssize_t offset = sizeof(*mld_report);
 
@@ -172,7 +173,7 @@ void mld_handle(struct mrib_querier* mrib,
       return;
     }
 
-    groups_update_state(&q->groups, &hdr->mld_addr, NULL, 0,
+    groups_update_state(&q->groups, &hdr->mld_addr, nullptr, 0,
                         (hdr->mld_icmp6_hdr.icmp6_type == MLD_LISTENER_REPORT)
                             ? UPDATE_REPORT
                             : UPDATE_DONE);
@@ -191,15 +192,16 @@ ssize_t mld_send_query(struct querier_iface* q,
   struct {
     struct mld_query q;
     struct in6_addr addrs[QUERIER_MAX_SOURCE];
-  } query = {.q = {
-                 .mld = {.mld_icmp6_hdr = {MLD_LISTENER_QUERY,
-                                           0,
-                                           0,
-                                           {.icmp6_un_data16 = {mrc, 0}}}},
-                 .s_qrv = (q->groups.cfg_v6.robustness & 0x7) |
-                          (suppress ? QUERIER_SUPPRESS : 0),
-                 .qqic = querier_qqic(q->groups.cfg_v6.query_interval / 1000),
-             }};
+  } query = {
+      .q = {
+          .mld = {.mld_icmp6_hdr = {MLD_LISTENER_QUERY,
+                                    0,
+                                    0,
+                                    {.icmp6_un_data16 = {mrc, 0}}}},
+          .s_qrv = static_cast<uint8_t>((q->groups.cfg_v6.robustness & 0x7) |
+                                        (suppress ? QUERIER_SUPPRESS : 0)),
+          .qqic = querier_qqic(q->groups.cfg_v6.query_interval / 1000),
+      }};
 
   struct group_source* s;
   size_t cnt = 0;
@@ -214,7 +216,8 @@ ssize_t mld_send_query(struct querier_iface* q,
   }
   query.q.nsrc = htons(cnt);
 
-  struct sockaddr_in6 dest = {AF_INET6, 0, 0, IPV6_ALL_NODES_INIT, q->ifindex};
+  struct sockaddr_in6 dest = {AF_INET6, 0, 0, IPV6_ALL_NODES_INIT,
+                              static_cast<uint32_t>(q->ifindex)};
 
   if (group) {
     query.q.mld.mld_addr = dest.sin6_addr = *group;

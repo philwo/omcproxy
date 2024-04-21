@@ -45,7 +45,7 @@ struct uloop_fd_stack {
   unsigned int events;
 };
 
-static struct uloop_fd_stack* fd_stack = NULL;
+static struct uloop_fd_stack* fd_stack = nullptr;
 
 #define ULOOP_MAX_EVENTS 10
 
@@ -63,7 +63,7 @@ static struct uloop_fd_event cur_fds[ULOOP_MAX_EVENTS];
 static int cur_fd, cur_nfds;
 static int uloop_run_depth = 0;
 
-uloop_fd_handler uloop_fd_set_cb = NULL;
+uloop_fd_handler uloop_fd_set_cb = nullptr;
 
 static int uloop_init_pollfd(void) {
   if (poll_fd >= 0) {
@@ -115,7 +115,7 @@ static int uloop_fetch_events(int timeout) {
   nfds = epoll_wait(poll_fd, events, ARRAY_SIZE(events), timeout);
   for (n = 0; n < nfds; ++n) {
     struct uloop_fd_event* cur = &cur_fds[n];
-    struct uloop_fd* u = events[n].data.ptr;
+    struct uloop_fd* u = static_cast<uloop_fd*>(events[n].data.ptr);
     unsigned int ev = 0;
 
     cur->fd = u;
@@ -132,7 +132,7 @@ static int uloop_fetch_events(int timeout) {
 
     if (!(events[n].events &
           (EPOLLRDHUP | EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP))) {
-      cur->fd = NULL;
+      cur->fd = nullptr;
       continue;
     }
 
@@ -185,8 +185,8 @@ static void signal_consume(struct uloop_fd* fd, unsigned int events) {
 
 static int waker_pipe = -1;
 static struct uloop_fd waker_fd = {
-    .fd = -1,
     .cb = signal_consume,
+    .fd = -1,
 };
 
 static void waker_init_fd(int fd) {
@@ -250,7 +250,7 @@ static bool uloop_fd_stack_event(struct uloop_fd* fd, int events) {
     }
 
     if (events < 0) {
-      cur->fd = NULL;
+      cur->fd = nullptr;
     } else {
       cur->events |= events | ULOOP_EVENT_BUFFERED;
     }
@@ -349,7 +349,7 @@ int uloop_fd_delete(struct uloop_fd* fd) {
       continue;
     }
 
-    cur_fds[cur_fd + i].fd = NULL;
+    cur_fds[cur_fd + i].fd = nullptr;
   }
 
   if (!fd->registered) {
@@ -517,8 +517,8 @@ static void uloop_install_handler(int signum,
   struct sigaction s;
   struct sigaction* act;
 
-  act = NULL;
-  sigaction(signum, NULL, &s);
+  act = nullptr;
+  sigaction(signum, nullptr, &s);
 
   if (add) {
     if (s.sa_handler ==
@@ -533,16 +533,16 @@ static void uloop_install_handler(int signum,
     act = old;
   }
 
-  if (act != NULL) {
-    sigaction(signum, act, NULL);
+  if (act != nullptr) {
+    sigaction(signum, act, nullptr);
   }
 }
 
 static void uloop_ignore_signal(int signum, bool ignore) {
   struct sigaction s;
-  void* new_handler = NULL;
+  sighandler_t new_handler = nullptr;
 
-  sigaction(signum, NULL, &s);
+  sigaction(signum, nullptr, &s);
 
   if (ignore) {
     if (s.sa_handler ==
@@ -559,7 +559,7 @@ static void uloop_ignore_signal(int signum, bool ignore) {
   if (new_handler) {
     s.sa_handler = new_handler;
     s.sa_flags = 0;
-    sigaction(signum, &s, NULL);
+    sigaction(signum, &s, nullptr);
   }
 }
 

@@ -23,7 +23,7 @@ void _list_del(struct list_head* entry) {
 
 void list_del(struct list_head* entry) {
   _list_del(entry);
-  entry->next = entry->prev = NULL;
+  entry->next = entry->prev = nullptr;
 }
 
 void _list_add(struct list_head* _new,

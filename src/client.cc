@@ -18,8 +18,8 @@
  */
 
 #include <alloca.h>
-#include <errno.h>
-#include <string.h>
+#include <cerrno>
+#include <cstring>
 #include <unistd.h>
 
 #include <arpa/inet.h>
@@ -47,9 +47,10 @@ int client_set(struct client* client,
   struct {
     struct group_filter f;
     struct sockaddr_storage s[];
-  }* filter = alloca(len);
-  struct sockaddr_in* in_addr = (struct sockaddr_in*)&filter->f.gf_group;
-  struct sockaddr_in6* in6_addr = (struct sockaddr_in6*)&filter->f.gf_group;
+  }* filter;
+  filter = reinterpret_cast<decltype(filter)>(alloca(len));
+  auto* in_addr = (struct sockaddr_in*)&filter->f.gf_group;
+  auto* in6_addr = (struct sockaddr_in6*)&filter->f.gf_group;
 
   inet_ntop(AF_INET6, group, addrbuf, sizeof(addrbuf));
   L_DEBUG("%s: %s on %d => %s (+%d sources)", __FUNCTION__, addrbuf,

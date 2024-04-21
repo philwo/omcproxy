@@ -17,11 +17,10 @@
  *
  */
 
-#include <errno.h>
 #include <libubox/list.h>
 #include <netinet/in.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdlib>
+#include <cstring>
 
 #include "querier.h"
 
@@ -109,7 +108,7 @@ static void querier_iface_timer(struct uloop_timeout* timeout) {
       iface->igmp_other_querier = false;
     }
 
-    igmp_send_query(iface, NULL, NULL, false);
+    igmp_send_query(iface, nullptr, nullptr, false);
     L_DEBUG("%s: sending generic IGMP-query on %d (S: 0)", __FUNCTION__,
             iface->ifindex);
 
@@ -134,7 +133,7 @@ static void querier_iface_timer(struct uloop_timeout* timeout) {
       iface->mld_other_querier = false;
     }
 
-    mld_send_query(iface, NULL, NULL, false);
+    mld_send_query(iface, nullptr, nullptr, false);
     L_DEBUG("%s: sending generic MLD-query on %d (S: 0)", __FUNCTION__,
             iface->ifindex);
 
@@ -210,7 +209,7 @@ int querier_attach(struct querier_user_iface* user,
                    struct querier* querier,
                    int ifindex,
                    querier_iface_cb* cb) {
-  struct querier_iface *c, *iface = NULL;
+  struct querier_iface *c, *iface = nullptr;
   list_for_each_entry(c, &ifaces, head) {
     if (c->ifindex == ifindex) {
       iface = c;
@@ -220,11 +219,8 @@ int querier_attach(struct querier_user_iface* user,
 
   omcp_time_t now = omcp_time();
   int res = 0;
-  if (!iface) {
-    if (!(iface = calloc(1, sizeof(*iface)))) {
-      res = -errno;
-      goto out;
-    }
+  if (iface == nullptr) {
+    iface = new querier_iface();
 
     list_add(&iface->head, &ifaces);
     INIT_LIST_HEAD(&iface->users);
@@ -235,7 +231,6 @@ int querier_attach(struct querier_user_iface* user,
 
     groups_init(&iface->groups);
     iface->groups.source_limit = QUERIER_MAX_SOURCE;
-    iface->groups.group_limit = QUERIER_MAX_GROUPS;
     iface->groups.cb_update = querier_announce_change;
     iface->groups.cb_query = querier_send_query;
     iface->cfg = iface->groups.cfg_v6;
@@ -249,19 +244,17 @@ int querier_attach(struct querier_user_iface* user,
   }
 
 out:
-  if (iface) {
-    list_add(&user->head, &iface->users);
-    user->iface = iface;
+  list_add(&user->head, &iface->users);
+  user->iface = iface;
 
-    list_add(&user->user.head, &querier->ifaces);
-    user->user_cb = cb;
-    user->user.querier = querier;
-    user->user.groups = &iface->groups;
+  list_add(&user->user.head, &querier->ifaces);
+  user->user_cb = cb;
+  user->user.querier = querier;
+  user->user.groups = &iface->groups;
 
-    struct group* group;
-    groups_for_each_group(group, &iface->groups)
-        querier_announce_iface(user, now, group, true);
-  }
+  struct group* group;
+  groups_for_each_group(group, &iface->groups)
+      querier_announce_iface(user, now, group, true);
 
   if (res) {
     querier_detach(user);

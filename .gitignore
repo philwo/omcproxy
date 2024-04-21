@@ -20,3 +20,5 @@ install_manifest.txt
 .ninja_log
 build.ninja
 /.cmake/
+/build/
+/.vscode/

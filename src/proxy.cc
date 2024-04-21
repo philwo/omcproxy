@@ -15,7 +15,7 @@
  *
  */
 
-#include <errno.h>
+#include <cerrno>
 #include <libubox/list.h>
 
 #include "client.h"
@@ -23,19 +23,55 @@
 #include "proxy.h"
 #include "querier.h"
 
+ProxyScope ProxyFlags::GetScope(){
+  return scope;
+}
+
+// Match scope of a multicast-group against proxy scope-filter
+bool ProxyFlags::MatchScope(const struct in6_addr* addr){
+  unsigned int s = 0;
+  if (IN6_IS_ADDR_V4MAPPED(addr)) {
+    if (addr->s6_addr[12] == 239 && addr->s6_addr[13] == 255) {
+      s = PROXY_REALMLOCAL;
+    } else if (addr->s6_addr[12] == 239 && (addr->s6_addr[13] & 0xfc) == 192) {
+      s = PROXY_ORGLOCAL;
+    } else if (addr->s6_addr[12] == 224 && addr->s6_addr[13] == 0 &&
+               addr->s6_addr[14] == 0) {
+      s = 2;
+    } else {
+      s = PROXY_GLOBAL;
+    }
+  } else {
+    s = addr->s6_addr[1] & 0xf;
+  }
+  return s >= this->scope;
+}
+
+bool ProxyFlags::IsFlushable() const{
+  return flushable;
+}
+
+bool ProxyFlags::IsUnused() const{
+  return unused;
+}
+
+void ProxyFlags::SetUnused(bool value){
+  this->unused = value;
+}
+
 struct proxy {
   struct list_head head;
   unsigned int ifindex;
   struct mrib_user mrib;
   struct querier querier;
-  enum proxy_flags flags;
+  ProxyFlags flags;
 };
 
 struct proxy_downlink {
   struct querier_user_iface iface;
   struct mrib_user mrib;
   struct client client;
-  enum proxy_flags flags;
+  ProxyFlags flags;
 };
 
 static struct list_head proxies = LIST_HEAD_INIT(proxies);
@@ -48,34 +84,13 @@ static void proxy_remove_downlink(struct proxy_downlink* downlink) {
   free(downlink);
 }
 
-// Match scope of a multicast-group against proxy scope-filter
-static bool proxy_match_scope(enum proxy_flags flags,
-                              const struct in6_addr* addr) {
-  unsigned scope = 0;
-  if (IN6_IS_ADDR_V4MAPPED(addr)) {
-    if (addr->s6_addr[12] == 239 && addr->s6_addr[13] == 255) {
-      scope = PROXY_REALMLOCAL;
-    } else if (addr->s6_addr[12] == 239 && (addr->s6_addr[13] & 0xfc) == 192) {
-      scope = PROXY_ORGLOCAL;
-    } else if (addr->s6_addr[12] == 224 && addr->s6_addr[13] == 0 &&
-               addr->s6_addr[14] == 0) {
-      scope = 2;
-    } else {
-      scope = PROXY_GLOBAL;
-    }
-  } else {
-    scope = addr->s6_addr[1] & 0xf;
-  }
-  return scope >= (flags & _PROXY_SCOPEMASK);
-}
-
 // Test and set multicast route (called by mrib on detection of new source)
 static void proxy_mrib(struct mrib_user* mrib,
                        const struct in6_addr* group,
                        const struct in6_addr* source,
                        mrib_filter* filter) {
   struct proxy* proxy = container_of(mrib, struct proxy, mrib);
-  if (!proxy_match_scope(proxy->flags, group)) {
+  if (!proxy->flags.MatchScope(group)) {
     return;
   }
 
@@ -100,7 +115,7 @@ static void proxy_trigger(struct querier_user_iface* user,
                           size_t len) {
   struct proxy_downlink* iface =
       container_of(user, struct proxy_downlink, iface);
-  if (proxy_match_scope(iface->flags, group)) {
+  if (iface->flags.MatchScope(group)) {
     client_set(&iface->client, group, include, sources, len);
   }
 }
@@ -111,7 +126,7 @@ static int proxy_unset(struct proxy* proxyp) {
   struct proxy *proxy, *n;
   list_for_each_entry_safe(proxy, n, &proxies, head) {
     if ((proxyp && proxy == proxyp) ||
-        (!proxyp && (proxy->flags & _PROXY_UNUSED))) {
+        (!proxyp && (proxy->flags.IsUnused()))) {
       mrib_detach_user(&proxy->mrib);
 
       struct querier_user *user, *n;
@@ -134,14 +149,14 @@ static int proxy_unset(struct proxy* proxyp) {
 int proxy_set(unsigned int uplink,
               const unsigned int downlinks[],
               size_t downlinks_cnt,
-              enum proxy_flags flags) {
-  struct proxy *proxy = NULL, *p;
+              ProxyFlags flags) {
+  struct proxy *proxy = nullptr, *p;
   list_for_each_entry(p, &proxies, head) if (p->ifindex == uplink) proxy = p;
 
-  if (proxy && (downlinks_cnt == 0 || ((proxy->flags & _PROXY_SCOPEMASK) !=
-                                       (flags & _PROXY_SCOPEMASK)))) {
+  if (proxy && (downlinks_cnt == 0 || ((proxy->flags.GetScope()) !=
+                                       (flags.GetScope())))) {
     proxy_unset(proxy);
-    proxy = NULL;
+    proxy = nullptr;
   }
 
   if (downlinks_cnt <= 0) {
@@ -149,13 +164,7 @@ int proxy_set(unsigned int uplink,
   }
 
   if (!proxy) {
-    if (!(proxy = calloc(1, sizeof(*proxy)))) {
-      return -ENOMEM;
-    }
-
-    if ((flags & _PROXY_SCOPEMASK) == 0) {
-      flags |= PROXY_GLOBAL;
-    }
+    proxy = new struct proxy();
 
     proxy->flags = flags;
     proxy->ifindex = uplink;
@@ -197,16 +206,13 @@ int proxy_set(unsigned int uplink,
       continue;
     }
 
-    struct proxy_downlink* downlink = calloc(1, sizeof(*downlink));
-    if (!downlink) {
-      goto err;
-    }
+    auto* downlink = new struct proxy_downlink();
 
     if (client_init(&downlink->client, uplink)) {
       goto downlink_err3;
     }
 
-    if (mrib_attach_user(&downlink->mrib, downlinks[i], NULL)) {
+    if (mrib_attach_user(&downlink->mrib, downlinks[i], nullptr)) {
       goto downlink_err2;
     }
 
@@ -238,11 +244,11 @@ err:
 void proxy_update(bool all) {
   struct proxy* proxy;
   list_for_each_entry(proxy, &proxies,
-                      head) if (all || (proxy->flags & PROXY_FLUSHABLE))
-      proxy->flags |= _PROXY_UNUSED;
+                      head) if (all || (proxy->flags.IsFlushable()))
+      proxy->flags.SetUnused(true);
 }
 
 // Flush all unused proxies
-void proxy_flush(void) {
-  proxy_unset(NULL);
+void proxy_flush() {
+  proxy_unset(nullptr);
 }

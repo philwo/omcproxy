@@ -18,8 +18,8 @@
  */
 
 #include "groups.h"
-#include <stdlib.h>
-#include <string.h>
+#include <cstdlib>
+#include <cstring>
 
 bool group_is_included(const struct group* group, omcp_time_t time) {
   return group->exclude_until <= time;
@@ -108,7 +108,7 @@ static omcp_time_t expire_group(struct groups* groups,
     group->next_generic_transmit = 0;
 
     if (groups->cb_query) {
-      groups->cb_query(groups, &group->addr, NULL, group->exclude_until > llqt);
+      groups->cb_query(groups, &group->addr, nullptr, group->exclude_until > llqt);
     }
 
     --group->retransmit;
@@ -201,7 +201,7 @@ static void expire_groups(struct uloop_timeout* t) {
 
 // Initialize a group-state
 void groups_init(struct groups* groups) {
-  avl_init(&groups->groups, compare_groups, false, NULL);
+  avl_init(&groups->groups, compare_groups, false, nullptr);
   groups->timer.cb = expire_groups;
 
   groups_update_config(groups, false, OMCP_TIME_PER_SECOND * 10,
@@ -224,7 +224,8 @@ static struct group* groups_get_group(struct groups* groups,
                                       const struct in6_addr* addr,
                                       bool* created) {
   struct group* group = avl_find_element(&groups->groups, addr, group, node);
-  if (!group && created && (group = calloc(1, sizeof(*group)))) {
+  if (!group && created) {
+    group = new struct group();
     group->addr = *addr;
     group->node.key = &group->addr;
     avl_insert(&groups->groups, &group->node);
@@ -242,12 +243,12 @@ static struct group_source* groups_get_source(struct groups* groups,
                                               struct group* group,
                                               const struct in6_addr* addr,
                                               bool* created) {
-  struct group_source *c, *source = NULL;
+  struct group_source *c, *source = nullptr;
   group_for_each_source(c, group) if (IN6_ARE_ADDR_EQUAL(&c->addr, addr))
       source = c;
 
-  if (!source && created && group->source_count < groups->source_limit &&
-      (source = calloc(1, sizeof(*source)))) {
+  if (!source && created && group->source_count < groups->source_limit) {
+    source = new struct group_source();
     source->addr = *addr;
     list_add_tail(&source->head, &group->sources);
     ++group->source_count;
@@ -281,7 +282,7 @@ void groups_update_timers(struct groups* groups,
                           size_t len) {
   char addrbuf[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, groupaddr, addrbuf, sizeof(addrbuf));
-  struct group* group = groups_get_group(groups, groupaddr, NULL);
+  struct group* group = groups_get_group(groups, groupaddr, nullptr);
   if (!group) {
     L_WARN("%s: failed to update timer: no such group %s", __FUNCTION__,
            addrbuf);
@@ -301,7 +302,7 @@ void groups_update_timers(struct groups* groups,
   } else {
     for (size_t i = 0; i < len; ++i) {
       struct group_source* source =
-          groups_get_source(groups, group, &addrs[i], NULL);
+          groups_get_source(groups, group, &addrs[i], nullptr);
       if (!source) {
         L_WARN("%s: failed to update timer: unknown sources for group %s",
                __FUNCTION__, addrbuf);
@@ -388,7 +389,7 @@ void groups_update_state(struct groups* groups,
   struct list_head saved = LIST_HEAD_INIT(saved);
   struct list_head queried = LIST_HEAD_INIT(queried);
   for (size_t i = 0; i < len; ++i) {
-    bool* create = (include && update == UPDATE_BLOCK) ? NULL : &created;
+    bool* create = (include && update == UPDATE_BLOCK) ? nullptr : &created;
     struct group_source* source =
         groups_get_source(groups, group, &addrs[i], create);
 
@@ -399,7 +400,7 @@ void groups_update_state(struct groups* groups,
     } else {
       bool query = false;
       if (!source) {
-        groups_update_state(groups, groupaddr, NULL, 0, false);
+        groups_update_state(groups, groupaddr, nullptr, 0, UPDATE_NONE);
         L_WARN("querier: failed to allocate source for %s, fallback to ASM",
                addrbuf);
         return;
@@ -540,13 +541,13 @@ bool groups_includes_group(struct groups* groups,
                            const struct in6_addr* addr,
                            const struct in6_addr* src,
                            omcp_time_t time) {
-  struct group* group = groups_get_group(groups, addr, NULL);
+  struct group* group = groups_get_group(groups, addr, nullptr);
   if (group) {
     if (!src && (!group_is_included(group, time) || group->source_count > 0)) {
       return true;
     }
 
-    struct group_source* source = groups_get_source(groups, group, src, NULL);
+    struct group_source* source = groups_get_source(groups, group, src, nullptr);
     if ((!group_is_included(group, time) &&
          (!source || source_is_included(source, time))) ||
         (group_is_included(group, time) && source &&

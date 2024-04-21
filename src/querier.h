@@ -24,8 +24,7 @@
 #include <libubox/uloop.h>
 #include <net/if.h>
 #include <netinet/in.h>
-#include <stdbool.h>
-#include <string.h>
+#include <cstring>
 
 #include "groups.h"
 #include "mrib.h"
@@ -36,12 +35,10 @@ struct querier_iface {
   struct uloop_timeout timeout;
   struct groups_config cfg;
 
-  struct uloop_fd igmp_fd;
   omcp_time_t igmp_next_query;
   bool igmp_other_querier;
   int igmp_startup_tries;
 
-  struct uloop_fd mld_fd;
   omcp_time_t mld_next_query;
   bool mld_other_querier;
   int mld_startup_tries;
@@ -91,7 +88,6 @@ struct querier {
 };
 
 #define QUERIER_MAX_SOURCE 75
-#define QUERIER_MAX_GROUPS 256
 #define QUERIER_SUPPRESS (1 << 3)
 
 in_addr_t querier_unmap(const struct in6_addr* addr6);
