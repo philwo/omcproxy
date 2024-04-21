@@ -723,22 +723,6 @@ void mrib_detach_querier(struct mrib_querier* querier) {
   mrib_clean_iface(iface);
 }
 
-static uint8_t prefix_contains(const struct in6_addr* p,
-                               uint8_t plen,
-                               const struct in6_addr* addr) {
-  int blen = plen >> 3;
-  if (blen && memcmp(p, addr, blen) != 0) {
-    return 0;
-  }
-
-  int rem = plen & 0x07;
-  if (rem && ((p->s6_addr[blen] ^ addr->s6_addr[blen]) >> (8 - rem))) {
-    return 0;
-  }
-
-  return 1;
-}
-
 // Add an interface to the filter
 int mrib_filter_add(mrib_filter* filter, struct mrib_user* user) {
   struct mrib_iface* iface = user->iface;

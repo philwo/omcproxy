@@ -29,20 +29,19 @@
 
 #pragma once
 
-#include <stdbool.h>
-#include <stddef.h>
+#include <cstddef>
 
 #ifndef container_of
-#define container_of(ptr, type, member)                      \
-  ({                                                         \
+#define container_of(ptr, type, member)                         \
+  ({                                                            \
     const __typeof__(((type*)nullptr)->member)* __mptr = (ptr); \
-    (type*)((char*)__mptr - offsetof(type, member));         \
+    (type*)((char*)__mptr - offsetof(type, member));            \
   })
 #endif
 
 #ifndef container_of_safe
-#define container_of_safe(ptr, type, member)                         \
-  ({                                                                 \
+#define container_of_safe(ptr, type, member)                            \
+  ({                                                                    \
     const __typeof__(((type*)nullptr)->member)* __mptr = (ptr);         \
     __mptr ? (type*)((char*)__mptr - offsetof(type, member)) : nullptr; \
   })

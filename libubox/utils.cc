@@ -17,8 +17,8 @@
  */
 
 #include "utils.h"
-#include <errno.h>
-#include <string.h>
+#include <cerrno>
+#include <cstring>
 
 int mkdir_p(char* dir, mode_t mask) {
   char* l;

@@ -38,9 +38,6 @@
  * the copyright holders.
  */
 
-#include <stdbool.h>
-#include <stddef.h>
-
 #include "avl.h"
 #include "list.h"
 
@@ -243,7 +240,8 @@ int avl_insert(struct avl_tree* tree, struct avl_node* new_node) {
     return 0;
   }
 
-  node = avl_find_rec(tree->root, new_node->key, tree->comp, tree->cmp_ptr, &diff);
+  node =
+      avl_find_rec(tree->root, new_node->key, tree->comp, tree->cmp_ptr, &diff);
 
   last = node;
 
