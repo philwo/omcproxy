@@ -165,20 +165,11 @@ char* ustream_get_read_buf(struct ustream* s, int* buflen);
  */
 void ustream_set_read_blocked(struct ustream* s, bool set);
 
-static inline bool ustream_read_blocked(struct ustream* s) {
-  return !!(s->read_blocked & READ_BLOCKED_USER);
-}
+bool ustream_read_blocked(struct ustream* s);
 
-static inline int ustream_pending_data(struct ustream* s, bool write) {
-  struct ustream_buf_list* b = write ? &s->w : &s->r;
-  return b->data_bytes;
-}
+int ustream_pending_data(struct ustream* s, bool write);
 
-static inline bool ustream_read_buf_full(struct ustream* s) {
-  struct ustream_buf* buf = s->r.data_tail;
-  return buf && buf->data == buf->head && buf->tail == buf->end &&
-         s->r.buffers == s->r.max_buffers;
-}
+bool ustream_read_buf_full(struct ustream* s);
 
 /*** --- functions only used by ustream implementations --- ***/
 
@@ -202,14 +193,6 @@ void ustream_fill_read(struct ustream* s, int len);
  */
 bool ustream_write_pending(struct ustream* s);
 
-static inline void ustream_state_change(struct ustream* s) {
-  uloop_timeout_set(&s->state_change, 0);
-}
+void ustream_state_change(struct ustream* s);
 
-static inline bool ustream_poll(struct ustream* s) {
-  if (!s->poll) {
-    return false;
-  }
-
-  return s->poll(s);
-}
+bool ustream_poll(struct ustream* s);

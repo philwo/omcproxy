@@ -37,7 +37,7 @@ struct mld_query {
 };
 
 // Test whether group address is valid and interesting
-static inline bool mld_is_valid_group(const struct in6_addr* addr) {
+static bool mld_is_valid_group(const struct in6_addr* addr) {
   return IN6_IS_ADDR_MULTICAST(addr);
 }
 

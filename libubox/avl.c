@@ -46,6 +46,60 @@
 #include "list.h"
 
 /**
+ * @param tree pointer to avl-tree
+ * @param node pointer to node of the tree
+ * @return true if node is the first one of the tree, false otherwise
+ */
+bool avl_is_first(struct avl_tree* tree, struct avl_node* node) {
+  return tree->list_head.next == &node->list;
+}
+
+/**
+ * @param tree pointer to avl-tree
+ * @param node pointer to node of the tree
+ * @return true if node is the last one of the tree, false otherwise
+ */
+bool avl_is_last(struct avl_tree* tree, struct avl_node* node) {
+  return tree->list_head.prev == &node->list;
+}
+
+/**
+ * @param tree pointer to avl-tree
+ * @return true if the tree is empty, false otherwise
+ */
+bool avl_is_empty(struct avl_tree* tree) {
+  return tree->count == 0;
+}
+
+/**
+ * Internal function to support returning the element from a avl tree query
+ * @param tree pointer to avl tree
+ * @param key pointer to key
+ * @param offset offset of node inside the embedded struct
+ * @param mode mode of lookup operation (less equal, equal or greater equal)
+ * @param pointer to elemen, NULL if no fitting one was found
+ */
+void* __avl_find_element(const struct avl_tree* tree,
+                         const void* key,
+                         size_t offset,
+                         enum avl_find_mode mode) {
+  void* node = NULL;
+
+  switch (mode) {
+    case AVL_FIND_EQUAL:
+      node = avl_find(tree, key);
+      break;
+    case AVL_FIND_LESSEQUAL:
+      node = avl_find_lessequal(tree, key);
+      break;
+    case AVL_FIND_GREATEREQUAL:
+      node = avl_find_greaterequal(tree, key);
+      break;
+  }
+  return node == NULL ? NULL : (((char*)node) - offset);
+}
+
+/**
  * internal type save inline function to calculate the maximum of
  * to integers without macro implementation.
  *
@@ -53,7 +107,7 @@
  * @param y second parameter of maximum function
  * @return largest integer of both parameters
  */
-static inline int avl_max(int x, int y) {
+static int avl_max(int x, int y) {
   return x > y ? x : y;
 }
 
@@ -65,7 +119,7 @@ static inline int avl_max(int x, int y) {
  * @param y second parameter of minimum function
  * @return smallest integer of both parameters
  */
-static inline int avl_min(int x, int y) {
+static int avl_min(int x, int y) {
   return x < y ? x : y;
 }
 
@@ -104,7 +158,7 @@ void avl_init(struct avl_tree* tree,
   tree->cmp_ptr = ptr;
 }
 
-static inline struct avl_node* avl_next(struct avl_node* node) {
+static struct avl_node* avl_next(struct avl_node* node) {
   return list_entry(node->list.next, struct avl_node, list);
 }
 

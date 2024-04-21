@@ -31,6 +31,21 @@
 #define C_PTR_ALIGN (sizeof(size_t))
 #define C_PTR_MASK (-C_PTR_ALIGN)
 
+unsigned int cbuf_order(unsigned int x) {
+  return 32 - __builtin_clz(x - 1);
+}
+
+unsigned long cbuf_size(int order) {
+  unsigned long page_size = sysconf(_SC_PAGESIZE);
+  unsigned long ret = 1ULL << order;
+
+  if (ret < page_size) {
+    ret = page_size;
+  }
+
+  return ret;
+}
+
 void* __calloc_a(size_t len, ...) {
   va_list ap, ap1;
   void* ret;

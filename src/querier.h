@@ -94,22 +94,9 @@ struct querier {
 #define QUERIER_MAX_GROUPS 256
 #define QUERIER_SUPPRESS (1 << 3)
 
-static inline in_addr_t querier_unmap(const struct in6_addr* addr6) {
-  return addr6->s6_addr32[3];
-}
+in_addr_t querier_unmap(const struct in6_addr* addr6);
 
-static inline void querier_map(struct in6_addr* addr6, in_addr_t addr4) {
-  addr6->s6_addr32[0] = 0;
-  addr6->s6_addr32[1] = 0;
-  addr6->s6_addr32[2] = cpu_to_be32(0xffff);
-  addr6->s6_addr32[3] = addr4;
-}
-
-void querier_announce(struct querier_user* user,
-                      omcp_time_t now,
-                      const struct group* group,
-                      bool enabled);
-void querier_synthesize_events(struct querier* querier);
+void querier_map(struct in6_addr* addr6, in_addr_t addr4);
 
 int querier_qqi(uint8_t qqic);
 int querier_mrd(uint16_t mrc);

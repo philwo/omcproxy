@@ -75,7 +75,7 @@ static struct uloop_fd mrt_fd = {.fd = -1};
 static struct uloop_fd mrt6_fd = {.fd = -1};
 
 // Unmap IPv4 address from IPv6
-static inline void mrib_unmap(struct in_addr* addr4,
+static void mrib_unmap(struct in_addr* addr4,
                               const struct in6_addr* addr6) {
   addr4->s_addr = addr6->s6_addr32[3];
 }

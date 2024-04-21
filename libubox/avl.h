@@ -175,26 +175,20 @@ void EXPORT(avl_delete)(struct avl_tree*, struct avl_node*);
  * @param node pointer to node of the tree
  * @return true if node is the first one of the tree, false otherwise
  */
-static inline bool avl_is_first(struct avl_tree* tree, struct avl_node* node) {
-  return tree->list_head.next == &node->list;
-}
+bool avl_is_first(struct avl_tree* tree, struct avl_node* node);
 
 /**
  * @param tree pointer to avl-tree
  * @param node pointer to node of the tree
  * @return true if node is the last one of the tree, false otherwise
  */
-static inline bool avl_is_last(struct avl_tree* tree, struct avl_node* node) {
-  return tree->list_head.prev == &node->list;
-}
+bool avl_is_last(struct avl_tree* tree, struct avl_node* node);
 
 /**
  * @param tree pointer to avl-tree
  * @return true if the tree is empty, false otherwise
  */
-static inline bool avl_is_empty(struct avl_tree* tree) {
-  return tree->count == 0;
-}
+bool avl_is_empty(struct avl_tree* tree);
 
 /**
  * Internal function to support returning the element from a avl tree query
@@ -204,25 +198,10 @@ static inline bool avl_is_empty(struct avl_tree* tree) {
  * @param mode mode of lookup operation (less equal, equal or greater equal)
  * @param pointer to elemen, NULL if no fitting one was found
  */
-static inline void* __avl_find_element(const struct avl_tree* tree,
-                                       const void* key,
-                                       size_t offset,
-                                       enum avl_find_mode mode) {
-  void* node = NULL;
-
-  switch (mode) {
-    case AVL_FIND_EQUAL:
-      node = avl_find(tree, key);
-      break;
-    case AVL_FIND_LESSEQUAL:
-      node = avl_find_lessequal(tree, key);
-      break;
-    case AVL_FIND_GREATEREQUAL:
-      node = avl_find_greaterequal(tree, key);
-      break;
-  }
-  return node == NULL ? NULL : (((char*)node) - offset);
-}
+void* __avl_find_element(const struct avl_tree* tree,
+                         const void* key,
+                         size_t offset,
+                         enum avl_find_mode mode);
 
 /**
  * @param tree pointer to avl-tree

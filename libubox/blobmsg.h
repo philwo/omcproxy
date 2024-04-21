@@ -49,62 +49,21 @@ struct blobmsg_policy {
   enum blobmsg_type type;
 };
 
-static inline int blobmsg_hdrlen(unsigned int namelen) {
-  return BLOBMSG_PADDING(sizeof(struct blobmsg_hdr) + namelen + 1);
-}
+int blobmsg_hdrlen(unsigned int namelen);
 
-static inline void blobmsg_clear_name(struct blob_attr* attr) {
-  struct blobmsg_hdr* hdr = (struct blobmsg_hdr*)blob_data(attr);
-  hdr->name[0] = 0;
-}
+void blobmsg_clear_name(struct blob_attr* attr);
 
-static inline const char* blobmsg_name(const struct blob_attr* attr) {
-  struct blobmsg_hdr* hdr = (struct blobmsg_hdr*)blob_data(attr);
-  return (const char*)(hdr + 1);
-}
+const char* blobmsg_name(const struct blob_attr* attr);
 
-static inline int blobmsg_type(const struct blob_attr* attr) {
-  return blob_id(attr);
-}
+int blobmsg_type(const struct blob_attr* attr);
 
-static uint16_t blobmsg_namelen(const struct blobmsg_hdr* hdr) {
-  return be16_to_cpu(hdr->namelen);
-}
+uint16_t blobmsg_namelen(const struct blobmsg_hdr* hdr);
 
-static inline void* blobmsg_data(const struct blob_attr* attr) {
-  struct blobmsg_hdr* hdr;
-  char* data;
+void* blobmsg_data(const struct blob_attr* attr);
 
-  if (!attr) {
-    return NULL;
-  }
+size_t blobmsg_data_len(const struct blob_attr* attr);
 
-  hdr = (struct blobmsg_hdr*)blob_data(attr);
-  data = (char*)blob_data(attr);
-
-  if (blob_is_extended(attr)) {
-    data += blobmsg_hdrlen(blobmsg_namelen(hdr));
-  }
-
-  return data;
-}
-
-static inline size_t blobmsg_data_len(const struct blob_attr* attr) {
-  uint8_t *start, *end;
-
-  if (!attr) {
-    return 0;
-  }
-
-  start = (uint8_t*)blob_data(attr);
-  end = (uint8_t*)blobmsg_data(attr);
-
-  return blob_len(attr) - (end - start);
-}
-
-static inline size_t blobmsg_len(const struct blob_attr* attr) {
-  return blobmsg_data_len(attr);
-}
+size_t blobmsg_len(const struct blob_attr* attr);
 
 /*
  * blobmsg_check_attr: validate a list of attributes
@@ -187,167 +146,61 @@ int blobmsg_add_field(struct blob_buf* buf,
                       const void* data,
                       unsigned int len);
 
-static inline int blobmsg_parse_attr(const struct blobmsg_policy* policy,
-                                     int policy_len,
-                                     struct blob_attr** tb,
-                                     struct blob_attr* data) {
-  return blobmsg_parse(policy, policy_len, tb, blobmsg_data(data),
-                       blobmsg_len(data));
-}
+int blobmsg_parse_attr(const struct blobmsg_policy* policy,
+                       int policy_len,
+                       struct blob_attr** tb,
+                       struct blob_attr* data);
 
-static inline int blobmsg_parse_array_attr(const struct blobmsg_policy* policy,
-                                           int policy_len,
-                                           struct blob_attr** tb,
-                                           struct blob_attr* data) {
-  return blobmsg_parse_array(policy, policy_len, tb, blobmsg_data(data),
-                             blobmsg_len(data));
-}
+int blobmsg_parse_array_attr(const struct blobmsg_policy* policy,
+                             int policy_len,
+                             struct blob_attr** tb,
+                             struct blob_attr* data);
 
-static inline int blobmsg_add_double(struct blob_buf* buf,
-                                     const char* name,
-                                     double val) {
-  union {
-    double d;
-    uint64_t u64;
-  } v;
-  v.d = val;
-  v.u64 = cpu_to_be64(v.u64);
-  return blobmsg_add_field(buf, BLOBMSG_TYPE_DOUBLE, name, &v.u64, 8);
-}
+int blobmsg_add_double(struct blob_buf* buf, const char* name, double val);
 
-static inline int blobmsg_add_u8(struct blob_buf* buf,
-                                 const char* name,
-                                 uint8_t val) {
-  return blobmsg_add_field(buf, BLOBMSG_TYPE_INT8, name, &val, 1);
-}
+int blobmsg_add_u8(struct blob_buf* buf, const char* name, uint8_t val);
 
-static inline int blobmsg_add_u16(struct blob_buf* buf,
-                                  const char* name,
-                                  uint16_t val) {
-  val = cpu_to_be16(val);
-  return blobmsg_add_field(buf, BLOBMSG_TYPE_INT16, name, &val, 2);
-}
+int blobmsg_add_u16(struct blob_buf* buf, const char* name, uint16_t val);
 
-static inline int blobmsg_add_u32(struct blob_buf* buf,
-                                  const char* name,
-                                  uint32_t val) {
-  val = cpu_to_be32(val);
-  return blobmsg_add_field(buf, BLOBMSG_TYPE_INT32, name, &val, 4);
-}
+int blobmsg_add_u32(struct blob_buf* buf, const char* name, uint32_t val);
 
-static inline int blobmsg_add_u64(struct blob_buf* buf,
-                                  const char* name,
-                                  uint64_t val) {
-  val = cpu_to_be64(val);
-  return blobmsg_add_field(buf, BLOBMSG_TYPE_INT64, name, &val, 8);
-}
+int blobmsg_add_u64(struct blob_buf* buf, const char* name, uint64_t val);
 
-static inline int blobmsg_add_string(struct blob_buf* buf,
-                                     const char* name,
-                                     const char* string) {
-  return blobmsg_add_field(buf, BLOBMSG_TYPE_STRING, name, string,
-                           strlen(string) + 1);
-}
+int blobmsg_add_string(struct blob_buf* buf,
+                       const char* name,
+                       const char* string);
 
-static inline int blobmsg_add_blob(struct blob_buf* buf,
-                                   struct blob_attr* attr) {
-  return blobmsg_add_field(buf, blobmsg_type(attr), blobmsg_name(attr),
-                           blobmsg_data(attr), blobmsg_data_len(attr));
-}
+int blobmsg_add_blob(struct blob_buf* buf, struct blob_attr* attr);
 
 void* blobmsg_open_nested(struct blob_buf* buf, const char* name, bool array);
 
-static inline void* blobmsg_open_array(struct blob_buf* buf, const char* name) {
-  return blobmsg_open_nested(buf, name, true);
-}
+void* blobmsg_open_array(struct blob_buf* buf, const char* name);
 
-static inline void* blobmsg_open_table(struct blob_buf* buf, const char* name) {
-  return blobmsg_open_nested(buf, name, false);
-}
+void* blobmsg_open_table(struct blob_buf* buf, const char* name);
 
-static inline void blobmsg_close_array(struct blob_buf* buf, void* cookie) {
-  blob_nest_end(buf, cookie);
-}
+void blobmsg_close_array(struct blob_buf* buf, void* cookie);
 
-static inline void blobmsg_close_table(struct blob_buf* buf, void* cookie) {
-  blob_nest_end(buf, cookie);
-}
+void blobmsg_close_table(struct blob_buf* buf, void* cookie);
 
-static inline int blobmsg_buf_init(struct blob_buf* buf) {
-  return blob_buf_init(buf, BLOBMSG_TYPE_TABLE);
-}
+int blobmsg_buf_init(struct blob_buf* buf);
 
-static inline uint8_t blobmsg_get_u8(struct blob_attr* attr) {
-  return *(uint8_t*)blobmsg_data(attr);
-}
+uint8_t blobmsg_get_u8(struct blob_attr* attr);
 
-static inline bool blobmsg_get_bool(struct blob_attr* attr) {
-  return *(uint8_t*)blobmsg_data(attr);
-}
+bool blobmsg_get_bool(struct blob_attr* attr);
 
-static inline uint16_t blobmsg_get_u16(struct blob_attr* attr) {
-  return be16_to_cpu(*(uint16_t*)blobmsg_data(attr));
-}
+uint16_t blobmsg_get_u16(struct blob_attr* attr);
 
-static inline uint32_t blobmsg_get_u32(struct blob_attr* attr) {
-  return be32_to_cpu(*(uint32_t*)blobmsg_data(attr));
-}
+uint32_t blobmsg_get_u32(struct blob_attr* attr);
 
-static inline uint64_t blobmsg_get_u64(struct blob_attr* attr) {
-  uint32_t* ptr = (uint32_t*)blobmsg_data(attr);
-  uint64_t tmp = ((uint64_t)be32_to_cpu(ptr[0])) << 32;
-  tmp |= be32_to_cpu(ptr[1]);
-  return tmp;
-}
+uint64_t blobmsg_get_u64(struct blob_attr* attr);
 
-static inline uint64_t blobmsg_cast_u64(struct blob_attr* attr) {
-  uint64_t tmp = 0;
+uint64_t blobmsg_cast_u64(struct blob_attr* attr);
 
-  if (blobmsg_type(attr) == BLOBMSG_TYPE_INT64) {
-    tmp = blobmsg_get_u64(attr);
-  } else if (blobmsg_type(attr) == BLOBMSG_TYPE_INT32) {
-    tmp = blobmsg_get_u32(attr);
-  } else if (blobmsg_type(attr) == BLOBMSG_TYPE_INT16) {
-    tmp = blobmsg_get_u16(attr);
-  } else if (blobmsg_type(attr) == BLOBMSG_TYPE_INT8) {
-    tmp = blobmsg_get_u8(attr);
-  }
+int64_t blobmsg_cast_s64(struct blob_attr* attr);
 
-  return tmp;
-}
+double blobmsg_get_double(struct blob_attr* attr);
 
-static inline int64_t blobmsg_cast_s64(struct blob_attr* attr) {
-  int64_t tmp = 0;
-
-  if (blobmsg_type(attr) == BLOBMSG_TYPE_INT64) {
-    tmp = blobmsg_get_u64(attr);
-  } else if (blobmsg_type(attr) == BLOBMSG_TYPE_INT32) {
-    tmp = (int32_t)blobmsg_get_u32(attr);
-  } else if (blobmsg_type(attr) == BLOBMSG_TYPE_INT16) {
-    tmp = (int16_t)blobmsg_get_u16(attr);
-  } else if (blobmsg_type(attr) == BLOBMSG_TYPE_INT8) {
-    tmp = (int8_t)blobmsg_get_u8(attr);
-  }
-
-  return tmp;
-}
-
-static inline double blobmsg_get_double(struct blob_attr* attr) {
-  union {
-    double d;
-    uint64_t u64;
-  } v;
-  v.u64 = blobmsg_get_u64(attr);
-  return v.d;
-}
-
-static inline char* blobmsg_get_string(struct blob_attr* attr) {
-  if (!attr) {
-    return NULL;
-  }
-
-  return (char*)blobmsg_data(attr);
-}
+char* blobmsg_get_string(struct blob_attr* attr);
 
 void* blobmsg_alloc_string_buffer(struct blob_buf* buf,
                                   const char* name,

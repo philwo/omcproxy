@@ -848,6 +848,10 @@ int uloop_run_timeout(int timeout) {
   return uloop_status;
 }
 
+int uloop_run(void) {
+  return uloop_run_timeout(-1);
+}
+
 void uloop_done(void) {
   uloop_setup_signals(false);
 
@@ -865,4 +869,8 @@ void uloop_done(void) {
 
   uloop_clear_timeouts();
   uloop_clear_processes();
+}
+
+void uloop_end(void) {
+  uloop_cancelled = true;
 }

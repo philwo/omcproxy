@@ -28,6 +28,17 @@
 
 static struct list_head ifaces = LIST_HEAD_INIT(ifaces);
 
+in_addr_t querier_unmap(const struct in6_addr* addr6) {
+  return addr6->s6_addr32[3];
+}
+
+void querier_map(struct in6_addr* addr6, in_addr_t addr4) {
+  addr6->s6_addr32[0] = 0;
+  addr6->s6_addr32[1] = 0;
+  addr6->s6_addr32[2] = cpu_to_be32(0xffff);
+  addr6->s6_addr32[3] = addr4;
+}
+
 // Handle querier update event from a querier-interface
 static void querier_announce_iface(struct querier_user_iface* user,
                                    omcp_time_t now,

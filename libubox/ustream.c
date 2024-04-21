@@ -26,6 +26,33 @@
 
 #define CB_PENDING_READ (1 << 0)
 
+bool ustream_read_blocked(struct ustream* s) {
+  return !!(s->read_blocked & READ_BLOCKED_USER);
+}
+
+int ustream_pending_data(struct ustream* s, bool write) {
+  struct ustream_buf_list* b = write ? &s->w : &s->r;
+  return b->data_bytes;
+}
+
+bool ustream_read_buf_full(struct ustream* s) {
+  struct ustream_buf* buf = s->r.data_tail;
+  return buf && buf->data == buf->head && buf->tail == buf->end &&
+         s->r.buffers == s->r.max_buffers;
+}
+
+void ustream_state_change(struct ustream* s) {
+  uloop_timeout_set(&s->state_change, 0);
+}
+
+bool ustream_poll(struct ustream* s) {
+  if (!s->poll) {
+    return false;
+  }
+
+  return s->poll(s);
+}
+
 static void ustream_init_buf(struct ustream_buf* buf, int len) {
   if (!len) {
     abort();

@@ -24,7 +24,7 @@
 #include "querier.h"
 
 // Test if multicast-group is valid and relevant
-static inline bool igmp_is_valid_group(in_addr_t group) {
+static bool igmp_is_valid_group(in_addr_t group) {
   return IN_MULTICAST(be32_to_cpu(group));
 }
 
