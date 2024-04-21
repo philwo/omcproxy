@@ -1,0 +1,10 @@
+# Defines the Chromium style for automatic reformatting.
+# http://clang.llvm.org/docs/ClangFormatStyleOptions.html
+BasedOnStyle: Chromium
+Standard: Latest
+
+# TODO(crbug.com/1392808): Remove when InsertBraces has been upstreamed into
+# the Chromium style (is implied by BasedOnStyle: Chromium).
+InsertBraces: true
+InsertNewlineAtEOF: true
+

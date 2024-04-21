@@ -15,3 +15,10 @@ coverage
 .settings
 install_manifest.txt
 *~
+/.idea/
+.ninja_deps
+.ninja_log
+build.ninja
+/.cmake/
+/build/
+/.vscode/

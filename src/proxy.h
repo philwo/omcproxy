@@ -17,29 +17,45 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <stdbool.h>
+#include <cstdint>
 #include <netinet/in.h>
 
-enum proxy_flags {
-	// minimum scope to proxy (use only one, includes higher scopes)
-	PROXY_REALMLOCAL = 3,
-	PROXY_ADMINLOCAL = 4,
-	PROXY_SITELOCAL = 5,
-	PROXY_ORGLOCAL = 8,
-	PROXY_GLOBAL = 0xe,
-
-	// proxy may be flushed (from static config source)
-	PROXY_FLUSHABLE = 1 << 4,
-
-	// internal values
-	_PROXY_UNUSED = 1 << 5,
-	_PROXY_SCOPEMASK = 0xf,
+// minimum scope to proxy (use only one, includes higher scopes)
+// source: https://datatracker.ietf.org/doc/html/rfc7346#section-2
+enum ProxyScope {
+  PROXY_REALMLOCAL = 0x3,
+  PROXY_ADMINLOCAL = 0x4,
+  PROXY_SITELOCAL = 0x5,
+  PROXY_ORGLOCAL = 0x8,
+  PROXY_GLOBAL = 0xe,
 };
 
+class ProxyFlags {
+ private:
+  ProxyScope scope;
+  bool flushable;
+  bool unused;
 
-int proxy_set(int uplink, const int downlinks[], size_t downlinks_cnt, enum proxy_flags flags);
+ public:
+  ProxyFlags(ProxyScope scope, bool flushable, bool unused)
+      : scope(scope), flushable(flushable), unused(unused) {}
 
+  explicit ProxyFlags(ProxyScope scope) : ProxyFlags(scope, false, false) {}
+
+  ProxyFlags() : ProxyFlags(PROXY_GLOBAL) {}
+
+  ProxyScope GetScope();
+  bool MatchScope(const struct in6_addr* addr);
+
+  [[nodiscard]] bool IsFlushable() const;
+  [[nodiscard]] bool IsUnused() const;
+  void SetUnused(bool unused);
+};
+
+int proxy_set(unsigned int uplink,
+              const unsigned int downlinks[],
+              size_t downlinks_cnt,
+              ProxyFlags flags);
 
 void proxy_update(bool all);
-void proxy_flush(void);
+void proxy_flush();
