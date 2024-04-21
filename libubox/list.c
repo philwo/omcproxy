@@ -35,22 +35,12 @@ void _list_add(struct list_head* _new,
   prev->next = _new;
 }
 
-void list_del_init(struct list_head* entry) {
-  _list_del(entry);
-  INIT_LIST_HEAD(entry);
-}
-
 void list_add(struct list_head* _new, struct list_head* head) {
   _list_add(_new, head, head->next);
 }
 
 void list_add_tail(struct list_head* _new, struct list_head* head) {
   _list_add(_new, head->prev, head);
-}
-
-void list_move(struct list_head* list, struct list_head* head) {
-  _list_del(list);
-  list_add(list, head);
 }
 
 void list_move_tail(struct list_head* entry, struct list_head* head) {
@@ -80,16 +70,7 @@ void list_splice(const struct list_head* list, struct list_head* head) {
   _list_splice(list, head, head->next);
 }
 
-void list_splice_tail(struct list_head* list, struct list_head* head) {
-  _list_splice(list, head->prev, head);
-}
-
 void list_splice_init(struct list_head* list, struct list_head* head) {
   _list_splice(list, head, head->next);
-  INIT_LIST_HEAD(list);
-}
-
-void list_splice_tail_init(struct list_head* list, struct list_head* head) {
-  _list_splice(list, head->prev, head);
   INIT_LIST_HEAD(list);
 }

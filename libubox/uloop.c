@@ -23,7 +23,6 @@
 #include <limits.h>
 #include <poll.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -65,8 +64,6 @@ static int cur_fd, cur_nfds;
 static int uloop_run_depth = 0;
 
 uloop_fd_handler uloop_fd_set_cb = NULL;
-
-int uloop_fd_add(struct uloop_fd* sock, unsigned int flags);
 
 static int uloop_init_pollfd(void) {
   if (poll_fd >= 0) {
@@ -155,83 +152,6 @@ static int uloop_fetch_events(int timeout) {
   }
 
   return nfds;
-}
-
-static void dispatch_timer(struct uloop_fd* u, unsigned int events) {
-  if (!(events & ULOOP_READ)) {
-    return;
-  }
-
-  uint64_t fired;
-
-  if (read(u->fd, &fired, sizeof(fired)) != sizeof(fired)) {
-    return;
-  }
-
-  struct uloop_interval* tm = container_of(u, struct uloop_interval, priv.ufd);
-
-  tm->expirations += fired;
-  tm->cb(tm);
-}
-
-static int timer_register(struct uloop_interval* tm, unsigned int msecs) {
-  if (!tm->priv.ufd.registered) {
-    int fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
-
-    if (fd == -1) {
-      return -1;
-    }
-
-    tm->priv.ufd.fd = fd;
-    tm->priv.ufd.cb = dispatch_timer;
-  }
-
-  struct itimerspec spec = {
-      .it_value = {.tv_sec = msecs / 1000, .tv_nsec = (msecs % 1000) * 1000000},
-      .it_interval = {.tv_sec = msecs / 1000,
-                      .tv_nsec = (msecs % 1000) * 1000000}};
-
-  if (timerfd_settime(tm->priv.ufd.fd, 0, &spec, NULL) == -1) {
-    goto err;
-  }
-
-  if (uloop_fd_add(&tm->priv.ufd, ULOOP_READ) == -1) {
-    goto err;
-  }
-
-  return 0;
-
-err:
-  uloop_fd_delete(&tm->priv.ufd);
-  close(tm->priv.ufd.fd);
-  memset(&tm->priv.ufd, 0, sizeof(tm->priv.ufd));
-
-  return -1;
-}
-
-static int timer_remove(struct uloop_interval* tm) {
-  int ret = __uloop_fd_delete(&tm->priv.ufd);
-
-  if (ret == 0) {
-    close(tm->priv.ufd.fd);
-    memset(&tm->priv.ufd, 0, sizeof(tm->priv.ufd));
-  }
-
-  return ret;
-}
-
-static int64_t timer_next(struct uloop_interval* tm) {
-  struct itimerspec spec;
-
-  if (!tm->priv.ufd.registered) {
-    return -1;
-  }
-
-  if (timerfd_gettime(tm->priv.ufd.fd, &spec) == -1) {
-    return -1;
-  }
-
-  return spec.it_value.tv_sec * 1000 + spec.it_value.tv_nsec / 1000000;
 }
 
 static void set_signo(uint64_t* signums, int signo) {
@@ -512,27 +432,6 @@ int uloop_timeout_cancel(struct uloop_timeout* timeout) {
   return 0;
 }
 
-int uloop_timeout_remaining(struct uloop_timeout* timeout) {
-  int64_t td;
-  struct timeval now;
-
-  if (!timeout->pending) {
-    return -1;
-  }
-
-  uloop_gettime(&now);
-
-  td = tv_diff(&timeout->time, &now);
-
-  if (td > INT_MAX) {
-    return INT_MAX;
-  } else if (td < INT_MIN) {
-    return INT_MIN;
-  } else {
-    return (int)td;
-  }
-}
-
 int64_t uloop_timeout_remaining64(struct uloop_timeout* timeout) {
   struct timeval now;
 
@@ -543,27 +442,6 @@ int64_t uloop_timeout_remaining64(struct uloop_timeout* timeout) {
   uloop_gettime(&now);
 
   return tv_diff(&timeout->time, &now);
-}
-
-int uloop_process_add(struct uloop_process* p) {
-  struct uloop_process* tmp;
-  struct list_head* h = &processes;
-
-  if (p->pending) {
-    return -1;
-  }
-
-  list_for_each_entry(tmp, &processes, list) {
-    if (tmp->pid > p->pid) {
-      h = &tmp->list;
-      break;
-    }
-  }
-
-  list_add_tail(&p->list, h);
-  p->pending = true;
-
-  return 0;
 }
 
 int uloop_process_delete(struct uloop_process* p) {
@@ -607,18 +485,6 @@ static void uloop_handle_processes(void) {
       p->cb(p, ret);
     }
   }
-}
-
-int uloop_interval_set(struct uloop_interval* timer, unsigned int msecs) {
-  return timer_register(timer, msecs);
-}
-
-int uloop_interval_cancel(struct uloop_interval* timer) {
-  return timer_remove(timer);
-}
-
-int64_t uloop_interval_remaining(struct uloop_interval* timer) {
-  return timer_next(timer);
 }
 
 static void uloop_signal_wake(int signo) {
@@ -710,52 +576,6 @@ static void uloop_setup_signals(bool add) {
   uloop_ignore_signal(SIGPIPE, add);
 }
 
-int uloop_signal_add(struct uloop_signal* s) {
-  struct list_head* h = &signals;
-  struct uloop_signal* tmp;
-  struct sigaction sa;
-
-  if (s->pending) {
-    return -1;
-  }
-
-  list_for_each_entry(tmp, &signals, list) {
-    if (tmp->signo > s->signo) {
-      h = &tmp->list;
-      break;
-    }
-  }
-
-  list_add_tail(&s->list, h);
-  s->pending = true;
-
-  sigaction(s->signo, NULL, &s->orig);
-
-  if (s->orig.sa_handler != uloop_signal_wake) {
-    sa.sa_handler = uloop_signal_wake;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    sigaction(s->signo, &sa, NULL);
-  }
-
-  return 0;
-}
-
-int uloop_signal_delete(struct uloop_signal* s) {
-  if (!s->pending) {
-    return -1;
-  }
-
-  list_del(&s->list);
-  s->pending = false;
-
-  if (s->orig.sa_handler != uloop_signal_wake) {
-    sigaction(s->signo, &s->orig, NULL);
-  }
-
-  return 0;
-}
-
 int uloop_get_next_timeout(void) {
   struct uloop_timeout* timeout;
   struct timeval tv;
@@ -812,10 +632,6 @@ static void uloop_clear_processes(void) {
   struct uloop_process *p, *tmp;
 
   list_for_each_entry_safe(p, tmp, &processes, list) uloop_process_delete(p);
-}
-
-bool uloop_cancelling(void) {
-  return uloop_run_depth > 0 && uloop_cancelled;
 }
 
 int uloop_run_timeout(int timeout) {

@@ -9,7 +9,7 @@ target_compile_definitions(omcproxy PRIVATE _GNU_SOURCE _TIME_BITS=64 _FILE_OFFS
 target_compile_options(omcproxy PRIVATE -Wall)
 
 target_include_directories(omcproxy BEFORE PRIVATE .)
-target_sources(omcproxy PRIVATE libubox/avl.c libubox/blob.c libubox/blobmsg.c libubox/list.c libubox/uloop.c libubox/ustream.c libubox/utils.c)
+target_sources(omcproxy PRIVATE libubox/avl.c libubox/blob.c libubox/blobmsg.c libubox/list.c libubox/uloop.c libubox/utils.c)
 
 target_sources(omcproxy PRIVATE src/client.c src/mrib.c src/querier.c src/groups.c src/igmp.c src/mld.c src/proxy.c src/omcproxy.c)
 

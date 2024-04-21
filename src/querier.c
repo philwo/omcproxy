@@ -19,7 +19,6 @@
 
 #include <errno.h>
 #include <libubox/list.h>
-#include <libubox/ustream.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>

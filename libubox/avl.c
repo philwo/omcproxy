@@ -41,35 +41,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "assert.h"
 #include "avl.h"
 #include "list.h"
-
-/**
- * @param tree pointer to avl-tree
- * @param node pointer to node of the tree
- * @return true if node is the first one of the tree, false otherwise
- */
-bool avl_is_first(struct avl_tree* tree, struct avl_node* node) {
-  return tree->list_head.next == &node->list;
-}
-
-/**
- * @param tree pointer to avl-tree
- * @param node pointer to node of the tree
- * @return true if node is the last one of the tree, false otherwise
- */
-bool avl_is_last(struct avl_tree* tree, struct avl_node* node) {
-  return tree->list_head.prev == &node->list;
-}
-
-/**
- * @param tree pointer to avl-tree
- * @return true if the tree is empty, false otherwise
- */
-bool avl_is_empty(struct avl_tree* tree) {
-  return tree->count == 0;
-}
 
 /**
  * Internal function to support returning the element from a avl tree query
@@ -97,30 +70,6 @@ void* __avl_find_element(const struct avl_tree* tree,
       break;
   }
   return node == NULL ? NULL : (((char*)node) - offset);
-}
-
-/**
- * internal type save inline function to calculate the maximum of
- * to integers without macro implementation.
- *
- * @param x first parameter of maximum function
- * @param y second parameter of maximum function
- * @return largest integer of both parameters
- */
-static int avl_max(int x, int y) {
-  return x > y ? x : y;
-}
-
-/**
- * internal type save inline function to calculate the minimum of
- * to integers without macro implementation.
- *
- * @param x first parameter of minimum function
- * @param y second parameter of minimum function
- * @return smallest integer of both parameters
- */
-static int avl_min(int x, int y) {
-  return x < y ? x : y;
 }
 
 static struct avl_node* avl_find_rec(struct avl_node* node,
@@ -470,8 +419,8 @@ static void avl_rotate_right(struct avl_tree* tree, struct avl_node* node) {
     node->left->parent = node;
   }
 
-  node->balance += 1 - avl_min(left->balance, 0);
-  left->balance += 1 + avl_max(node->balance, 0);
+  node->balance += 1 - (left->balance < 0 ? left->balance : 0);
+  left->balance += 1 + (node->balance > 0 ? node->balance : 0);
 }
 
 static void avl_rotate_left(struct avl_tree* tree, struct avl_node* node) {
@@ -504,8 +453,8 @@ static void avl_rotate_left(struct avl_tree* tree, struct avl_node* node) {
     node->right->parent = node;
   }
 
-  node->balance -= 1 + avl_max(right->balance, 0);
-  right->balance -= 1 - avl_min(node->balance, 0);
+  node->balance -= 1 + (right->balance > 0 ? right->balance : 0);
+  right->balance -= 1 - (node->balance < 0 ? node->balance : 0);
 }
 
 static void post_insert(struct avl_tree* tree, struct avl_node* node) {
@@ -737,7 +686,6 @@ static void avl_delete_worker(struct avl_tree* tree, struct avl_node* node) {
       return;
     }
 
-    assert(node->right);
     node->right->parent = parent;
 
     if (parent->left == node) {

@@ -32,8 +32,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define prefetch(x)
-
 #ifndef container_of
 #define container_of(ptr, type, member)                      \
   ({                                                         \
@@ -76,31 +74,12 @@ void _list_add(struct list_head* _new,
                struct list_head* prev,
                struct list_head* next);
 
-void list_del_init(struct list_head* entry);
-
 #define list_entry(ptr, type, field) container_of(ptr, type, field)
 #define list_first_entry(ptr, type, field) list_entry((ptr)->next, type, field)
-#define list_last_entry(ptr, type, field) list_entry((ptr)->prev, type, field)
-#define list_next_entry(pos, member) \
-  list_entry((pos)->member.next, typeof(*(pos)), member)
-#define list_entry_is_h(p, h, field) (&p->field == (h))
-
-#define list_for_each(p, head) for (p = (head)->next; p != (head); p = p->next)
-
-#define list_for_each_safe(p, n, head) \
-  for (p = (head)->next, n = p->next; p != (head); p = n, n = p->next)
 
 #define list_for_each_entry(p, h, field)                                 \
   for (p = list_first_entry(h, __typeof__(*p), field); &p->field != (h); \
        p = list_entry(p->field.next, __typeof__(*p), field))
-
-#define list_for_each_entry_continue(p, h, field)                    \
-  for (p = list_next_entry(p, field); !list_entry_is_h(p, h, field); \
-       p = list_next_entry(p, field))
-
-#define list_for_each_entry_continue_reverse(p, h, field)            \
-  for (p = list_prev_entry(p, field); !list_entry_is_h(p, h, field); \
-       p = list_prev_entry(p, field))
 
 #define list_for_each_entry_safe(p, n, h, field)            \
   for (p = list_first_entry(h, __typeof__(*p), field),      \
@@ -108,19 +87,9 @@ void list_del_init(struct list_head* entry);
        &p->field != (h);                                    \
        p = n, n = list_entry(n->field.next, __typeof__(*n), field))
 
-#define list_for_each_entry_reverse(p, h, field)                        \
-  for (p = list_last_entry(h, __typeof__(*p), field); &p->field != (h); \
-       p = list_entry(p->field.prev, __typeof__(*p), field))
-
-#define list_for_each_prev(p, h) for (p = (h)->prev; p != (h); p = p->prev)
-#define list_for_each_prev_safe(p, n, h) \
-  for (p = (h)->prev, n = p->prev; p != (h); p = n, n = p->prev)
-
 void list_add(struct list_head* _new, struct list_head* head);
 
 void list_add_tail(struct list_head* _new, struct list_head* head);
-
-void list_move(struct list_head* list, struct list_head* head);
 
 void list_move_tail(struct list_head* entry, struct list_head* head);
 
@@ -130,8 +99,4 @@ void _list_splice(const struct list_head* list,
 
 void list_splice(const struct list_head* list, struct list_head* head);
 
-void list_splice_tail(struct list_head* list, struct list_head* head);
-
 void list_splice_init(struct list_head* list, struct list_head* head);
-
-void list_splice_tail_init(struct list_head* list, struct list_head* head);

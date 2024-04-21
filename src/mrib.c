@@ -56,11 +56,7 @@ struct mrib_iface {
 };
 
 /* we can't use cpu_to_be32 outside a function */
-#if __BYTE_ORDER == __BIG_ENDIAN
-static uint32_t ipv4_rtr_alert = 0x94040000;
-#else
 static uint32_t ipv4_rtr_alert = 0x00000494;
-#endif
 
 static struct {
   struct ip6_hbh hdr;
