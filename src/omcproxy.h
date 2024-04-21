@@ -37,12 +37,12 @@
 
 #endif /* __APPLE__ */
 
+#include <libubox/utils.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <time.h>
-#include <syslog.h>
 #include <sys/types.h>
-#include <libubox/utils.h>
+#include <syslog.h>
+#include <time.h>
 
 #define STR_EXPAND(tok) #tok
 #define STR(tok) STR_EXPAND(tok)
@@ -52,21 +52,21 @@ typedef int64_t omcp_time_t;
 #define OMCP_TIME_PER_SECOND INT64_C(1000)
 
 static inline omcp_time_t omcp_time(void) {
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ((omcp_time_t)ts.tv_sec * OMCP_TIME_PER_SECOND) +
-			((omcp_time_t)ts.tv_nsec / (1000000000 / OMCP_TIME_PER_SECOND));
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ((omcp_time_t)ts.tv_sec * OMCP_TIME_PER_SECOND) +
+         ((omcp_time_t)ts.tv_nsec / (1000000000 / OMCP_TIME_PER_SECOND));
 }
 
 extern int log_level;
 
 // Logging macros
 
-#define L_INTERNAL(level, ...)                  \
-do {                                            \
-  if (log_level >= level)                       \
-    syslog(level, L_PREFIX __VA_ARGS__);        \
- } while(0)
+#define L_INTERNAL(level, ...)             \
+  do {                                     \
+    if (log_level >= level)                \
+      syslog(level, L_PREFIX __VA_ARGS__); \
+  } while (0)
 
 #define L_ERR(...) L_INTERNAL(LOG_ERR, __VA_ARGS__)
 #define L_WARN(...) L_INTERNAL(LOG_WARNING, __VA_ARGS__)
