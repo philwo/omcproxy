@@ -64,7 +64,7 @@ static int uloop_run_depth = 0;
 
 uloop_fd_handler uloop_fd_set_cb = nullptr;
 
-static int uloop_init_pollfd(void) {
+static int uloop_init_pollfd() {
   if (poll_fd >= 0) {
     return 0;
   }
@@ -79,7 +79,7 @@ static int uloop_init_pollfd(void) {
 }
 
 static int register_poll(struct uloop_fd* fd, unsigned int flags) {
-  struct epoll_event ev;
+  struct epoll_event ev{};
   int op = fd->registered ? EPOLL_CTL_MOD : EPOLL_CTL_ADD;
 
   memset(&ev, 0, sizeof(struct epoll_event));
@@ -105,7 +105,7 @@ static struct epoll_event events[ULOOP_MAX_EVENTS];
 
 static int __uloop_fd_delete(struct uloop_fd* sock) {
   sock->flags = 0;
-  return epoll_ctl(poll_fd, EPOLL_CTL_DEL, sock->fd, 0);
+  return epoll_ctl(poll_fd, EPOLL_CTL_DEL, sock->fd, nullptr);
 }
 
 static int uloop_fetch_events(int timeout) {
@@ -273,7 +273,7 @@ static void uloop_run_events(int64_t timeout) {
   }
 
   while (cur_nfds > 0) {
-    struct uloop_fd_stack stack_cur;
+    struct uloop_fd_stack stack_cur{};
     unsigned int events;
 
     cur = &cur_fds[cur_fd++];
@@ -393,7 +393,7 @@ int uloop_timeout_add(struct uloop_timeout* timeout) {
 }
 
 static void uloop_gettime(struct timeval* tv) {
-  struct timespec ts;
+  struct timespec ts{};
 
   clock_gettime(CLOCK_MONOTONIC, &ts);
   tv->tv_sec = ts.tv_sec;
@@ -432,7 +432,7 @@ int uloop_timeout_cancel(struct uloop_timeout* timeout) {
 }
 
 int64_t uloop_timeout_remaining64(struct uloop_timeout* timeout) {
-  struct timeval now;
+  struct timeval now{};
 
   if (!timeout->pending) {
     return -1;
@@ -454,14 +454,14 @@ int uloop_process_delete(struct uloop_process* p) {
   return 0;
 }
 
-static void uloop_handle_processes(void) {
+static void uloop_handle_processes() {
   struct uloop_process *p, *tmp;
   pid_t pid;
   int ret;
 
   do_sigchld = false;
 
-  while (1) {
+  while (true) {
     pid = waitpid(-1, &ret, WNOHANG);
     if (pid < 0 && errno == EINTR) {
       continue;
@@ -500,7 +500,7 @@ static void uloop_signal_wake(int signo) {
       }
     }
     break;
-  } while (1);
+  } while (true);
 }
 
 static void uloop_handle_sigint(int signo) {
@@ -513,7 +513,7 @@ static void uloop_install_handler(int signum,
                                   void (*handler)(int),
                                   struct sigaction* old,
                                   bool add) {
-  struct sigaction s;
+  struct sigaction s{};
   struct sigaction* act;
 
   act = nullptr;
@@ -538,7 +538,7 @@ static void uloop_install_handler(int signum,
 }
 
 static void uloop_ignore_signal(int signum, bool ignore) {
-  struct sigaction s;
+  struct sigaction s{};
   sighandler_t new_handler = nullptr;
 
   sigaction(signum, nullptr, &s);
@@ -575,9 +575,9 @@ static void uloop_setup_signals(bool add) {
   uloop_ignore_signal(SIGPIPE, add);
 }
 
-int uloop_get_next_timeout(void) {
+int uloop_get_next_timeout() {
   struct uloop_timeout* timeout;
-  struct timeval tv;
+  struct timeval tv{};
   int64_t diff;
 
   if (list_empty(&timeouts)) {
@@ -598,9 +598,9 @@ int uloop_get_next_timeout(void) {
   return diff;
 }
 
-static void uloop_process_timeouts(void) {
+static void uloop_process_timeouts() {
   struct uloop_timeout* t;
-  struct timeval tv;
+  struct timeval tv{};
 
   if (list_empty(&timeouts)) {
     return;
@@ -621,21 +621,19 @@ static void uloop_process_timeouts(void) {
   }
 }
 
-static void uloop_clear_timeouts(void) {
+static void uloop_clear_timeouts() {
   struct uloop_timeout *t, *tmp;
 
   list_for_each_entry_safe(t, tmp, &timeouts, list) uloop_timeout_cancel(t);
 }
 
-static void uloop_clear_processes(void) {
+static void uloop_clear_processes() {
   struct uloop_process *p, *tmp;
 
   list_for_each_entry_safe(p, tmp, &processes, list) uloop_process_delete(p);
 }
 
 int uloop_run_timeout(int timeout) {
-  int next_time = 0;
-
   uloop_run_depth++;
 
   uloop_status = 0;
@@ -651,7 +649,7 @@ int uloop_run_timeout(int timeout) {
       break;
     }
 
-    next_time = uloop_get_next_timeout();
+    int next_time = uloop_get_next_timeout();
     if (timeout >= 0 && (next_time < 0 || timeout < next_time)) {
       next_time = timeout;
     }
@@ -663,11 +661,11 @@ int uloop_run_timeout(int timeout) {
   return uloop_status;
 }
 
-int uloop_run(void) {
+int uloop_run() {
   return uloop_run_timeout(-1);
 }
 
-void uloop_done(void) {
+void uloop_done() {
   uloop_setup_signals(false);
 
   if (poll_fd >= 0) {
@@ -686,6 +684,6 @@ void uloop_done(void) {
   uloop_clear_processes();
 }
 
-void uloop_end(void) {
+void uloop_end() {
   uloop_cancelled = true;
 }

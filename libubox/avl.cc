@@ -260,7 +260,7 @@ int avl_insert(struct avl_tree* tree, struct avl_node* new_node) {
       return -1;
     }
 
-    new_node->leader = 0;
+    new_node->leader = false;
 
     avl_insert_after(tree, last, new_node);
     return 0;
