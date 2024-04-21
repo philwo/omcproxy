@@ -30,25 +30,25 @@ struct group {
 	struct in6_addr addr;
 	struct list_head sources;
 	size_t source_count;
-	omgp_time_t exclude_until;
-	omgp_time_t compat_v2_until;
-	omgp_time_t compat_v1_until;
-	omgp_time_t next_generic_transmit;
-	omgp_time_t next_source_transmit;
+	omcp_time_t exclude_until;
+	omcp_time_t compat_v2_until;
+	omcp_time_t compat_v1_until;
+	omcp_time_t next_generic_transmit;
+	omcp_time_t next_source_transmit;
 	int retransmit;
 };
 
 struct group_source {
 	struct list_head head;
 	struct in6_addr addr;
-	omgp_time_t include_until;
+	omcp_time_t include_until;
 	int retransmit;
 };
 
 struct groups_config {
-	omgp_time_t query_response_interval;
-	omgp_time_t query_interval;
-	omgp_time_t last_listener_query_interval;
+	omcp_time_t query_response_interval;
+	omcp_time_t query_interval;
+	omcp_time_t last_listener_query_interval;
 	int robustness;
 	int last_listener_query_count;
 };
@@ -62,7 +62,7 @@ struct groups {
 	size_t group_limit;
 	void (*cb_query)(struct groups *g, const struct in6_addr *addr,
 			const struct list_head *sources, bool suppress);
-	void (*cb_update)(struct groups *g, struct group *group, omgp_time_t now);
+	void (*cb_update)(struct groups *g, struct group *group, omcp_time_t now);
 };
 
 
@@ -86,7 +86,7 @@ enum groups_update {
 };
 
 void groups_update_config(struct groups *groups, bool v6,
-		omgp_time_t query_response_interval, omgp_time_t query_interval, int robustness);
+		omcp_time_t query_response_interval, omcp_time_t query_interval, int robustness);
 
 void groups_update_timers(struct groups *groups,
 		const struct in6_addr *groupaddr,
@@ -101,12 +101,12 @@ void groups_synthesize_events(struct groups *groups);
 
 // Groups user query API
 
-static inline bool group_is_included(const struct group *group, omgp_time_t time)
+static inline bool group_is_included(const struct group *group, omcp_time_t time)
 {
 	return group->exclude_until <= time;
 }
 
-static inline bool source_is_included(const struct group_source *source, omgp_time_t time)
+static inline bool source_is_included(const struct group_source *source, omcp_time_t time)
 {
 	return source->include_until > time;
 }
@@ -123,4 +123,4 @@ static inline bool source_is_included(const struct group_source *source, omgp_ti
 
 const struct group* groups_get(struct groups *groups, const struct in6_addr *addr);
 bool groups_includes_group(struct groups *groups, const struct in6_addr *addr,
-		const struct in6_addr *src, omgp_time_t time);
+		const struct in6_addr *src, omcp_time_t time);

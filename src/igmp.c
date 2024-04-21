@@ -67,7 +67,7 @@ void igmp_handle(struct mrib_querier *mrib, const struct igmphdr *igmp, size_t l
 		const struct sockaddr_in *from)
 {
 	struct querier_iface *q = container_of(mrib, struct querier_iface, mrib);
-	omgp_time_t now = omgp_time();
+	omcp_time_t now = omcp_time();
 	char addrbuf[INET_ADDRSTRLEN];
 	struct in6_addr group;
 
@@ -92,8 +92,8 @@ void igmp_handle(struct mrib_querier *mrib, const struct igmphdr *igmp, size_t l
 		bool suppress = false;
 		size_t nsrc = 0;
 		int robustness = 2;
-		omgp_time_t mrd = 10000;
-		omgp_time_t query_interval = 125000;
+		omcp_time_t mrd = 10000;
+		omcp_time_t query_interval = 125000;
 
 		if (igmp->code)
 			mrd = 100 * ((len == sizeof(*igmp)) ? igmp->code : querier_qqi(igmp->code));
@@ -206,4 +206,3 @@ int igmp_send_query(struct querier_iface *q,
 	return mrib_send_igmp(&q->mrib, &query.q,
 			sizeof(query.q) + cnt * sizeof(query.srcs[0]), &dest);
 }
-

@@ -76,7 +76,7 @@ static void proxy_mrib(struct mrib_user *mrib, const struct in6_addr *group,
 	if (!proxy_match_scope(proxy->flags, group))
 		return;
 
-	omgp_time_t now = omgp_time();
+	omcp_time_t now = omcp_time();
 	struct querier_user *user;
 	list_for_each_entry(user, &proxy->querier.ifaces, head) {
 		if (groups_includes_group(user->groups, group, source, now)) {
@@ -158,9 +158,11 @@ int proxy_set(int uplink, const int downlinks[], size_t downlinks_cnt, enum prox
 		struct querier_user_iface *iface = container_of(user, struct querier_user_iface, user);
 
 		size_t i;
-		for (i = 0; i < downlinks_cnt && downlinks[i] == iface->iface->ifindex; ++i);
-			if (i == downlinks_cnt)
+		for (i = 0; i < downlinks_cnt && downlinks[i] == iface->iface->ifindex; ++i) {
+			if (i == downlinks_cnt) {
 				proxy_remove_downlink(container_of(iface, struct proxy_downlink, iface));
+			}
+		}
 	}
 
 	for (size_t i = 0; i < downlinks_cnt; ++i) {

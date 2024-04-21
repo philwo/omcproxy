@@ -36,12 +36,12 @@ struct querier_iface {
 	struct groups_config cfg;
 
 	struct uloop_fd igmp_fd;
-	omgp_time_t igmp_next_query;
+	omcp_time_t igmp_next_query;
 	bool igmp_other_querier;
 	int igmp_startup_tries;
 
 	struct uloop_fd mld_fd;
-	omgp_time_t mld_next_query;
+	omcp_time_t mld_next_query;
 	bool mld_other_querier;
 	int mld_startup_tries;
 
@@ -103,7 +103,7 @@ static inline void querier_map(struct in6_addr *addr6, in_addr_t addr4)
 	addr6->s6_addr32[3] = addr4;
 }
 
-void querier_announce(struct querier_user *user, omgp_time_t now, const struct group *group, bool enabled);
+void querier_announce(struct querier_user *user, omcp_time_t now, const struct group *group, bool enabled);
 void querier_synthesize_events(struct querier *querier);
 
 int querier_qqi(uint8_t qqic);
@@ -126,4 +126,3 @@ ssize_t mld_send_query(struct querier_iface *q,
 		const struct in6_addr *group,
 		const struct list_head *sources,
 		bool suppress);
-

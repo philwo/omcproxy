@@ -103,7 +103,7 @@ static int handle_proxy_set(void *data, size_t len)
 	return proxy_set(uplink, downlinks, downlinks_cnt, flags);
 }
 
-static void handle_signal(__unused int signal)
+static void handle_signal(int signal)
 {
 	uloop_end();
 }

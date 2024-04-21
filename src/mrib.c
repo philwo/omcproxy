@@ -44,7 +44,7 @@ struct mrib_route {
 	struct list_head head;
 	struct in6_addr group;
 	struct in6_addr source;
-	omgp_time_t valid_until;
+	omcp_time_t valid_until;
 };
 
 struct mrib_iface {
@@ -147,7 +147,7 @@ static int mrib_set(const struct in6_addr *group, const struct in6_addr *source,
 static void mrib_clean(struct uloop_timeout *t)
 {
 	struct mrib_iface *iface = container_of(t, struct mrib_iface, timer);
-	omgp_time_t now = omgp_time();
+	omcp_time_t now = omcp_time();
 	uloop_timeout_cancel(t);
 
 	struct mrib_route *c, *n;
@@ -193,10 +193,10 @@ static void mrib_notify_newsource(struct mrib_iface *iface,
 	if (route) {
 		route->group = *group;
 		route->source = *source;
-		route->valid_until = omgp_time() + MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND;
+		route->valid_until = omcp_time() + MRIB_DEFAULT_LIFETIME * OMCP_TIME_PER_SECOND;
 
 		if (list_empty(&iface->routes))
-			uloop_timeout_set(&iface->timer, MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND);
+			uloop_timeout_set(&iface->timer, MRIB_DEFAULT_LIFETIME * OMCP_TIME_PER_SECOND);
 
 		list_add_tail(&route->head, &iface->routes);
 		mrib_set(group, source, iface, filter, 0);
@@ -223,7 +223,7 @@ static uint16_t igmp_checksum(const uint16_t *buf, size_t len)
 }
 
 // Receive and handle MRT event
-static void mrib_receive_mrt(struct uloop_fd *fd, __unused unsigned flags)
+static void mrib_receive_mrt(struct uloop_fd *fd, unsigned flags)
 {
 	uint8_t buf[9216], cbuf[CMSG_SPACE(sizeof(struct in_pktinfo))];
 	char addrbuf[INET_ADDRSTRLEN];
@@ -324,7 +324,7 @@ static void mrib_receive_mrt(struct uloop_fd *fd, __unused unsigned flags)
 }
 
 // Receive and handle MRT6 event
-static void mrib_receive_mrt6(struct uloop_fd *fd, __unused unsigned flags)
+static void mrib_receive_mrt6(struct uloop_fd *fd, unsigned flags)
 {
 	uint8_t buf[9216], cbuf[128];
 	char addrbuf[INET6_ADDRSTRLEN];

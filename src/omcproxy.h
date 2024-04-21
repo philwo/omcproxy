@@ -17,14 +17,8 @@
  *
  */
 
-#ifndef OMGPROXY_H_
-#define OMGPROXY_H_
-
-#define OMGPROXY_DEFAULT_L_LEVEL 7
-
-#ifndef L_LEVEL
-#define L_LEVEL OMGPROXY_DEFAULT_L_LEVEL
-#endif /* !L_LEVEL */
+#ifndef OMCPROXY_H_
+#define OMCPROXY_H_
 
 #ifndef L_PREFIX
 #define L_PREFIX ""
@@ -53,15 +47,15 @@
 #define STR_EXPAND(tok) #tok
 #define STR(tok) STR_EXPAND(tok)
 
-typedef int64_t omgp_time_t;
-#define OMGP_TIME_MAX INT64_MAX
-#define OMGP_TIME_PER_SECOND INT64_C(1000)
+typedef int64_t omcp_time_t;
+#define OMCP_TIME_MAX INT64_MAX
+#define OMCP_TIME_PER_SECOND INT64_C(1000)
 
-static inline omgp_time_t omgp_time(void) {
+static inline omcp_time_t omcp_time(void) {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ((omgp_time_t)ts.tv_sec * OMGP_TIME_PER_SECOND) +
-			((omgp_time_t)ts.tv_nsec / (1000000000 / OMGP_TIME_PER_SECOND));
+	return ((omcp_time_t)ts.tv_sec * OMCP_TIME_PER_SECOND) +
+			((omcp_time_t)ts.tv_nsec / (1000000000 / OMCP_TIME_PER_SECOND));
 }
 
 extern int log_level;
@@ -74,49 +68,10 @@ do {                                            \
     syslog(level, L_PREFIX __VA_ARGS__);        \
  } while(0)
 
-#if L_LEVEL >= LOG_ERR
 #define L_ERR(...) L_INTERNAL(LOG_ERR, __VA_ARGS__)
-#else
-#define L_ERR(...) do {} while(0)
-#endif
-
-#if L_LEVEL >= LOG_WARNING
 #define L_WARN(...) L_INTERNAL(LOG_WARNING, __VA_ARGS__)
-#else
-#define L_WARN(...) do {} while(0)
-#endif
-
-#if L_LEVEL >= LOG_NOTICE
 #define L_NOTICE(...) L_INTERNAL(LOG_NOTICE, __VA_ARGS__)
-#else
-#define L_NOTICE(...) do {} while(0)
-#endif
-
-#if L_LEVEL >= LOG_INFO
 #define L_INFO(...) L_INTERNAL(LOG_INFO, __VA_ARGS__)
-#else
-#define L_INFO(...) do {} while(0)
-#endif
-
-#if L_LEVEL >= LOG_DEBUG
 #define L_DEBUG(...) L_INTERNAL(LOG_DEBUG, __VA_ARGS__)
-#else
-#define L_DEBUG(...) do {} while(0)
-#endif
 
-
-// Some C99 compatibility
-#ifndef typeof
-#define typeof __typeof
-#endif
-
-#ifndef container_of
-#define container_of(ptr, type, member) (           \
-    (type *)( (char *)ptr - offsetof(type,member) ))
-#endif
-
-#ifndef __unused
-#define __unused __attribute__((unused))
-#endif
-
-#endif /* PIMBD_H_ */
+#endif /* OMCPROXY_H_ */

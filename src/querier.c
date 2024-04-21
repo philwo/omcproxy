@@ -31,7 +31,7 @@ static struct list_head ifaces = LIST_HEAD_INIT(ifaces);
 
 
 // Handle querier update event from a querier-interface
-static void querier_announce_iface(struct querier_user_iface *user, omgp_time_t now, const struct group *group, bool enabled)
+static void querier_announce_iface(struct querier_user_iface *user, omcp_time_t now, const struct group *group, bool enabled)
 {
 	bool include = true;
 	size_t cnt = 0;
@@ -50,7 +50,7 @@ static void querier_announce_iface(struct querier_user_iface *user, omgp_time_t 
 }
 
 // Handle changes from a querier for a given group (called by a group-state as callback)
-static void querier_announce_change(struct groups *groups, struct group *group, omgp_time_t now)
+static void querier_announce_change(struct groups *groups, struct group *group, omcp_time_t now)
 {
 	struct querier_iface *iface = container_of(groups, struct querier_iface, groups);
 
@@ -82,8 +82,8 @@ static void querier_send_query(struct groups *groups, const struct in6_addr *gro
 static void querier_iface_timer(struct uloop_timeout *timeout)
 {
 	struct querier_iface *iface = container_of(timeout, struct querier_iface, timeout);
-	omgp_time_t now = omgp_time();
-	omgp_time_t next_event = now + 3600 * OMGP_TIME_PER_SECOND;
+	omcp_time_t now = omcp_time();
+	omcp_time_t next_event = now + 3600 * OMCP_TIME_PER_SECOND;
 
 	if (iface->igmp_next_query <= now) {
 		// If the other querier is gone, reset interface config
@@ -190,7 +190,7 @@ int querier_attach(struct querier_user_iface *user,
 		}
 	}
 
-	omgp_time_t now = omgp_time();
+	omcp_time_t now = omcp_time();
 	int res = 0;
 	if (!iface) {
 		if (!(iface = calloc(1, sizeof(*iface)))) {
@@ -245,7 +245,7 @@ void querier_detach(struct querier_user_iface *user)
 	list_del(&user->user.head);
 	list_del(&user->head);
 
-	omgp_time_t now = omgp_time();
+	omcp_time_t now = omcp_time();
 	struct group *group;
 	groups_for_each_group(group, &iface->groups)
 		querier_announce_iface(user, now, group, false);

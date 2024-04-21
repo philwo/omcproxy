@@ -78,7 +78,7 @@ void mld_handle(struct mrib_querier *mrib, const struct mld_hdr *hdr, size_t len
 		const struct sockaddr_in6 *from)
 {
 	char addrbuf[INET_ADDRSTRLEN];
-	omgp_time_t now = omgp_time();
+	omcp_time_t now = omcp_time();
 	inet_ntop(AF_INET6, &hdr->mld_addr, addrbuf, sizeof(addrbuf));
 
 	struct querier_iface *q = container_of(mrib, struct querier_iface, mrib);
@@ -101,8 +101,8 @@ void mld_handle(struct mrib_querier *mrib, const struct mld_hdr *hdr, size_t len
 		bool suppress = false;
 		size_t nsrc = 0;
 		int robustness = 2;
-		omgp_time_t mrd = 10000;
-		omgp_time_t query_interval = 125000;
+		omcp_time_t mrd = 10000;
+		omcp_time_t query_interval = 125000;
 
 		if (query->mld.mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0])
 			mrd = (len == 24) ? ntohs(query->mld.mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0]) :

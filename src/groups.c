@@ -24,7 +24,7 @@
 
 
 // Group comparator for AVL-tree
-static int compare_groups(const void *k1, const void *k2, __unused void *ptr)
+static int compare_groups(const void *k1, const void *k2, void *ptr)
 {
 	return memcmp(k1, k2, sizeof(struct in6_addr));
 }
@@ -46,7 +46,7 @@ static void querier_clear_sources(struct group *group)
 }
 
 // Remove a group and all associated sources from the group state
-static void querier_remove_group(struct groups *groups, struct group *group, omgp_time_t now)
+static void querier_remove_group(struct groups *groups, struct group *group, omcp_time_t now)
 {
 	querier_clear_sources(group);
 	group->exclude_until = 0;
@@ -59,12 +59,12 @@ static void querier_remove_group(struct groups *groups, struct group *group, omg
 }
 
 // Expire a group and / or its associated sources depending on the current time
-static omgp_time_t expire_group(struct groups *groups, struct group *group,
-		omgp_time_t now, omgp_time_t next_event)
+static omcp_time_t expire_group(struct groups *groups, struct group *group,
+		omcp_time_t now, omcp_time_t next_event)
 {
 	struct groups_config *cfg = IN6_IS_ADDR_V4MAPPED(&group->addr) ? &groups->cfg_v4 : &groups->cfg_v6;
-	omgp_time_t llqi = now + cfg->last_listener_query_interval;
-	omgp_time_t llqt = now + (cfg->last_listener_query_interval * cfg->last_listener_query_count);
+	omcp_time_t llqi = now + cfg->last_listener_query_interval;
+	omcp_time_t llqt = now + (cfg->last_listener_query_interval * cfg->last_listener_query_count);
 
 	// Handle group and source-specific query retransmission
 	struct list_head suppressed = LIST_HEAD_INIT(suppressed);
@@ -167,8 +167,8 @@ static void rearm_timer(struct groups *groups, int msecs)
 static void expire_groups(struct uloop_timeout *t)
 {
 	struct groups *groups = container_of(t, struct groups, timer);
-	omgp_time_t now = omgp_time();
-	omgp_time_t next_event = now + 3600 * OMGP_TIME_PER_SECOND;
+	omcp_time_t now = omcp_time();
+	omcp_time_t next_event = now + 3600 * OMCP_TIME_PER_SECOND;
 
 	struct group *group, *n;
 	avl_for_each_element_safe(&groups->groups, group, node, n)
@@ -183,16 +183,16 @@ void groups_init(struct groups *groups)
 	avl_init(&groups->groups, compare_groups, false, NULL);
 	groups->timer.cb = expire_groups;
 
-	groups_update_config(groups, false, OMGP_TIME_PER_SECOND * 10,
-			125 * OMGP_TIME_PER_SECOND, 2);
-	groups_update_config(groups, true, OMGP_TIME_PER_SECOND * 10,
-				125 * OMGP_TIME_PER_SECOND, 2);
+	groups_update_config(groups, false, OMCP_TIME_PER_SECOND * 10,
+			125 * OMCP_TIME_PER_SECOND, 2);
+	groups_update_config(groups, true, OMCP_TIME_PER_SECOND * 10,
+				125 * OMCP_TIME_PER_SECOND, 2);
 }
 
 // Cleanup a group-state
 void groups_deinit(struct groups *groups)
 {
-	omgp_time_t now = omgp_time();
+	omcp_time_t now = omcp_time();
 	struct group *group, *safe;
 	avl_for_each_element_safe(&groups->groups, group, node, safe)
 		querier_remove_group(groups, group, now);
@@ -241,14 +241,14 @@ static struct group_source* groups_get_source(struct groups *groups,
 
 // Update the IGMP/MLD timers of a group-state
 void groups_update_config(struct groups *groups, bool v6,
-		omgp_time_t query_response_interval, omgp_time_t query_interval, int robustness)
+		omcp_time_t query_response_interval, omcp_time_t query_interval, int robustness)
 {
 	struct groups_config *cfg = v6 ? &groups->cfg_v6 : &groups->cfg_v4;
 	cfg->query_response_interval = query_response_interval;
 	cfg->query_interval = query_interval;
 	cfg->robustness = robustness;
 	cfg->last_listener_query_count = cfg->robustness;
-	cfg->last_listener_query_interval = 1 * OMGP_TIME_PER_SECOND;
+	cfg->last_listener_query_interval = 1 * OMCP_TIME_PER_SECOND;
 }
 
 // Update timers for a given group (called when receiving queries from other queriers)
@@ -265,8 +265,8 @@ void groups_update_timers(struct groups *groups,
 	}
 
 	struct groups_config *cfg = IN6_IS_ADDR_V4MAPPED(&group->addr) ? &groups->cfg_v4 : &groups->cfg_v6;
-	omgp_time_t now = omgp_time();
-	omgp_time_t llqt = now + (cfg->last_listener_query_count * cfg->last_listener_query_interval);
+	omcp_time_t now = omcp_time();
+	omcp_time_t llqt = now + (cfg->last_listener_query_count * cfg->last_listener_query_interval);
 
 	if (len == 0) {
 		if (group->exclude_until > llqt)
@@ -307,8 +307,8 @@ void groups_update_state(struct groups *groups,
 	if (created)
 		changed = true;
 
-	omgp_time_t now = omgp_time();
-	omgp_time_t next_event = OMGP_TIME_MAX;
+	omcp_time_t now = omcp_time();
+	omcp_time_t next_event = OMCP_TIME_MAX;
 	struct groups_config *cfg = IN6_IS_ADDR_V4MAPPED(&group->addr) ? &groups->cfg_v4 : &groups->cfg_v6;
 
 	// Backwards compatibility modes
@@ -324,7 +324,7 @@ void groups_update_state(struct groups *groups,
 	}
 
 	if (update == UPDATE_REPORT || update == UPDATE_REPORT_V1 || update == UPDATE_DONE) {
-		omgp_time_t compat_until = now + cfg->query_response_interval +
+		omcp_time_t compat_until = now + cfg->query_response_interval +
 				(cfg->robustness * cfg->query_interval);
 
 		if (update == UPDATE_REPORT_V1)
@@ -340,8 +340,8 @@ void groups_update_state(struct groups *groups,
 	bool is_include = update == UPDATE_IS_INCLUDE || update == UPDATE_TO_IN || update == UPDATE_ALLOW;
 
 	int llqc = cfg->last_listener_query_count;
-	omgp_time_t mali = now + (cfg->robustness * cfg->query_interval) + cfg->query_response_interval;
-	omgp_time_t llqt = now + (cfg->last_listener_query_interval * llqc);
+	omcp_time_t mali = now + (cfg->robustness * cfg->query_interval) + cfg->query_response_interval;
+	omcp_time_t llqt = now + (cfg->last_listener_query_interval * llqc);
 
 	// RFC 3810 7.4
 	struct list_head saved = LIST_HEAD_INIT(saved);
@@ -463,7 +463,7 @@ void groups_update_state(struct groups *groups,
 	if (group_is_included(group, now) && group->source_count == 0)
 		next_event = now;
 
-	if (next_event < OMGP_TIME_MAX)
+	if (next_event < OMCP_TIME_MAX)
 		rearm_timer(groups, next_event - now);
 
 	if (changed)
@@ -482,7 +482,7 @@ const struct group* groups_get(struct groups *groups, const struct in6_addr *add
 // Test if a group (and source) is requested in the current group state
 // (i.e. for deciding if it should be routed / forwarded)
 bool groups_includes_group(struct groups *groups, const struct in6_addr *addr,
-		const struct in6_addr *src, omgp_time_t time)
+		const struct in6_addr *src, omcp_time_t time)
 {
 	struct group *group = groups_get_group(groups, addr, NULL);
 	if (group) {
