@@ -34,7 +34,7 @@ typedef int64_t omcp_time_t;
 #define OMCP_TIME_MAX INT64_MAX
 #define OMCP_TIME_PER_SECOND INT64_C(1000)
 
-extern int log_level;
+extern long log_level;
 
 omcp_time_t omcp_time(void);
 

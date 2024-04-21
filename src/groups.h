@@ -106,15 +106,9 @@ void groups_synthesize_events(struct groups* groups);
 
 // Groups user query API
 
-static inline bool group_is_included(const struct group* group,
-                                     omcp_time_t time) {
-  return group->exclude_until <= time;
-}
+bool group_is_included(const struct group* group, omcp_time_t time);
 
-static inline bool source_is_included(const struct group_source* source,
-                                      omcp_time_t time) {
-  return source->include_until > time;
-}
+bool source_is_included(const struct group_source* source, omcp_time_t time);
 
 #define groups_for_each_group(group, groupsp) \
   avl_for_each_element(&(groupsp)->groups, group, node)

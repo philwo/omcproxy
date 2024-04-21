@@ -21,6 +21,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+bool group_is_included(const struct group* group,
+                       omcp_time_t time) {
+  return group->exclude_until <= time;
+}
+
+bool source_is_included(const struct group_source* source,
+                        omcp_time_t time) {
+  return source->include_until > time;
+}
+
 // Group comparator for AVL-tree
 static int compare_groups(const void* k1, const void* k2,
                           __attribute__((unused)) void* ptr) {
@@ -170,7 +180,7 @@ static omcp_time_t expire_group(struct groups* groups,
 }
 
 // Rearm the global groups-timer if the next event is before timer expiration
-static void rearm_timer(struct groups* groups, int msecs) {
+static void rearm_timer(struct groups* groups, omcp_time_t msecs) {
   int64_t remain = uloop_timeout_remaining64(&groups->timer);
   if (remain < 0 || remain >= msecs) {
     uloop_timeout_set(&groups->timer, msecs);
@@ -523,12 +533,6 @@ void groups_update_state(struct groups* groups,
             (group_is_included(group, now)) ? "included" : "excluded",
             (int)group->source_count);
   }
-}
-
-// Get group object of a given group
-const struct group* groups_get(struct groups* groups,
-                               const struct in6_addr* addr) {
-  return groups_get_group(groups, addr, NULL);
 }
 
 // Test if a group (and source) is requested in the current group state

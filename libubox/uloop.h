@@ -24,12 +24,6 @@
 #include <stdint.h>
 #include <signal.h>
 
-#if defined(__APPLE__) || defined(__FreeBSD__)
-#define USE_KQUEUE
-#else
-#define USE_EPOLL
-#endif
-
 #include "list.h"
 
 struct uloop_fd;
@@ -53,9 +47,6 @@ typedef void (*uloop_signal_handler)(struct uloop_signal *s);
 
 /* internal flags */
 #define ULOOP_EVENT_BUFFERED	(1 << 4)
-#ifdef USE_KQUEUE
-#define ULOOP_EDGE_DEFER	(1 << 5)
-#endif
 
 #define ULOOP_ERROR_CB		(1 << 6)
 
@@ -120,7 +111,7 @@ int uloop_fd_delete(struct uloop_fd *sock);
 
 int uloop_get_next_timeout(void);
 int uloop_timeout_add(struct uloop_timeout *timeout);
-int uloop_timeout_set(struct uloop_timeout *timeout, int msecs);
+int uloop_timeout_set(struct uloop_timeout *timeout, time_t msecs);
 int uloop_timeout_cancel(struct uloop_timeout *timeout);
 int uloop_timeout_remaining(struct uloop_timeout *timeout) __attribute__((deprecated("use uloop_timeout_remaining64")));
 int64_t uloop_timeout_remaining64(struct uloop_timeout *timeout);

@@ -25,7 +25,7 @@
 
 struct proxy {
   struct list_head head;
-  int ifindex;
+  unsigned int ifindex;
   struct mrib_user mrib;
   struct querier querier;
   enum proxy_flags flags;
@@ -131,8 +131,8 @@ static int proxy_unset(struct proxy* proxyp) {
 }
 
 // Add / update proxy
-int proxy_set(int uplink,
-              const int downlinks[],
+int proxy_set(unsigned int uplink,
+              const unsigned int downlinks[],
               size_t downlinks_cnt,
               enum proxy_flags flags) {
   struct proxy *proxy = NULL, *p;

@@ -5,7 +5,7 @@ project(omcproxy C)
 add_executable(omcproxy)
 
 target_compile_features(omcproxy PRIVATE c_std_99)
-target_compile_definitions(omcproxy PRIVATE _GNU_SOURCE)
+target_compile_definitions(omcproxy PRIVATE _GNU_SOURCE _TIME_BITS=64 _FILE_OFFSET_BITS=64)
 target_compile_options(omcproxy PRIVATE -Wall)
 
 target_include_directories(omcproxy BEFORE PRIVATE .)

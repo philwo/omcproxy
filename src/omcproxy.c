@@ -28,7 +28,7 @@
 #include "omcproxy.h"
 #include "proxy.h"
 
-int log_level = LOG_WARNING;
+long log_level = LOG_WARNING;
 
 enum {
   PROXY_ATTR_SOURCE,
@@ -56,8 +56,8 @@ static int handle_proxy_set(void* data, size_t len) {
 
   const char* name =
       ((c = tb[PROXY_ATTR_SOURCE])) ? blobmsg_get_string(c) : NULL;
-  int uplink = 0;
-  int downlinks[32] = {0};
+  unsigned int uplink;
+  unsigned int downlinks[32] = {0};
   size_t downlinks_cnt = 0;
   enum proxy_flags flags = 0;
 
@@ -113,7 +113,7 @@ static int handle_proxy_set(void* data, size_t len) {
   return proxy_set(uplink, downlinks, downlinks_cnt, flags);
 }
 
-static void handle_signal(int signal) {
+static void handle_signal(__attribute__((unused)) int signal) {
   uloop_end();
 }
 
@@ -158,7 +158,13 @@ int main(int argc, char** argv) {
       usage(argv[0]);
       return 1;
     } else if (!strncmp(argv[i], "-v", 2)) {
-      if ((log_level = atoi(&argv[i][2])) <= 0) {
+      errno = 0;
+      log_level = strtol(&argv[1][2], NULL, 10);
+      if (errno != 0) {
+        usage(argv[0]);
+        return 1;
+      }
+      if (log_level <= 0 || log_level > 7) {
         log_level = 7;
       }
       continue;
