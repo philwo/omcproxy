@@ -40,12 +40,9 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
-#include <time.h>
-#include <string.h>
 
-#include "avl.h"
 #include "assert.h"
+#include "avl.h"
 #include "list.h"
 
 /**
@@ -72,13 +69,20 @@ static inline int avl_min(int x, int y) {
   return x < y ? x : y;
 }
 
-static struct avl_node *
-avl_find_rec(struct avl_node *node, const void *key, avl_tree_comp comp, void *ptr, int *cmp_result);
-static void avl_insert_before(struct avl_tree *tree, struct avl_node *pos_node, struct avl_node *node);
-static void avl_insert_after(struct avl_tree *tree, struct avl_node *pos_node, struct avl_node *node);
-static void post_insert(struct avl_tree *tree, struct avl_node *node);
-static void avl_delete_worker(struct avl_tree *tree, struct avl_node *node);
-static void avl_remove(struct avl_tree *tree, struct avl_node *node);
+static struct avl_node* avl_find_rec(struct avl_node* node,
+                                     const void* key,
+                                     avl_tree_comp comp,
+                                     void* ptr,
+                                     int* cmp_result);
+static void avl_insert_before(struct avl_tree* tree,
+                              struct avl_node* pos_node,
+                              struct avl_node* node);
+static void avl_insert_after(struct avl_tree* tree,
+                             struct avl_node* pos_node,
+                             struct avl_node* node);
+static void post_insert(struct avl_tree* tree, struct avl_node* node);
+static void avl_delete_worker(struct avl_tree* tree, struct avl_node* node);
+static void avl_remove(struct avl_tree* tree, struct avl_node* node);
 
 /**
  * Initialize a new avl_tree struct
@@ -88,9 +92,10 @@ static void avl_remove(struct avl_tree *tree, struct avl_node *node);
  *   elements with the same
  * @param ptr custom parameter for comparator
  */
-void
-avl_init(struct avl_tree *tree, avl_tree_comp comp, bool allow_dups, void *ptr)
-{
+void avl_init(struct avl_tree* tree,
+              avl_tree_comp comp,
+              bool allow_dups,
+              void* ptr) {
   INIT_LIST_HEAD(&tree->list_head);
   tree->root = NULL;
   tree->count = 0;
@@ -99,9 +104,8 @@ avl_init(struct avl_tree *tree, avl_tree_comp comp, bool allow_dups, void *ptr)
   tree->cmp_ptr = ptr;
 }
 
-static inline struct avl_node *avl_next(struct avl_node *node)
-{
-    return list_entry(node->list.next, struct avl_node, list);
+static inline struct avl_node* avl_next(struct avl_node* node) {
+  return list_entry(node->list.next, struct avl_node, list);
 }
 
 /**
@@ -111,14 +115,13 @@ static inline struct avl_node *avl_next(struct avl_node *node)
  * @return pointer to avl-node with key, NULL if no node with
  *    this key exists.
  */
-struct avl_node *
-avl_find(const struct avl_tree *tree, const void *key)
-{
-  struct avl_node *node;
+struct avl_node* avl_find(const struct avl_tree* tree, const void* key) {
+  struct avl_node* node;
   int diff;
 
-  if (tree->root == NULL)
+  if (tree->root == NULL) {
     return NULL;
+  }
 
   node = avl_find_rec(tree->root, key, tree->comp, tree->cmp_ptr, &diff);
 
@@ -133,13 +136,14 @@ avl_find(const struct avl_tree *tree, const void *key)
  * @return pointer to avl-node, NULL if no node with
  *    key less or equal specified key exists.
  */
-struct avl_node *
-avl_find_lessequal(const struct avl_tree *tree, const void *key) {
+struct avl_node* avl_find_lessequal(const struct avl_tree* tree,
+                                    const void* key) {
   struct avl_node *node, *next;
   int diff;
 
-  if (tree->root == NULL)
+  if (tree->root == NULL) {
     return NULL;
+  }
 
   node = avl_find_rec(tree->root, key, tree->comp, tree->cmp_ptr, &diff);
 
@@ -149,8 +153,8 @@ avl_find_lessequal(const struct avl_tree *tree, const void *key) {
       return NULL;
     }
 
-    node = (struct avl_node *)node->list.prev;
-    diff = (*tree->comp) (key, node->key, tree->cmp_ptr);
+    node = (struct avl_node*)node->list.prev;
+    diff = (*tree->comp)(key, node->key, tree->cmp_ptr);
   }
 
   /* go right as long as key>=next_node.key */
@@ -161,8 +165,8 @@ avl_find_lessequal(const struct avl_tree *tree, const void *key) {
       break;
     }
 
-    next = (struct avl_node *)node->list.next;
-    diff = (*tree->comp) (key, next->key, tree->cmp_ptr);
+    next = (struct avl_node*)node->list.next;
+    diff = (*tree->comp)(key, next->key, tree->cmp_ptr);
   }
   return node;
 }
@@ -175,13 +179,14 @@ avl_find_lessequal(const struct avl_tree *tree, const void *key) {
  * @return pointer to avl-node, NULL if no node with
  *    key greater or equal specified key exists.
  */
-struct avl_node *
-avl_find_greaterequal(const struct avl_tree *tree, const void *key) {
+struct avl_node* avl_find_greaterequal(const struct avl_tree* tree,
+                                       const void* key) {
   struct avl_node *node, *next;
   int diff;
 
-  if (tree->root == NULL)
+  if (tree->root == NULL) {
     return NULL;
+  }
 
   node = avl_find_rec(tree->root, key, tree->comp, tree->cmp_ptr, &diff);
 
@@ -191,8 +196,8 @@ avl_find_greaterequal(const struct avl_tree *tree, const void *key) {
       return NULL;
     }
 
-    node = (struct avl_node *)node->list.next;
-    diff = (*tree->comp) (key, node->key, tree->cmp_ptr);
+    node = (struct avl_node*)node->list.next;
+    diff = (*tree->comp)(key, node->key, tree->cmp_ptr);
   }
 
   /* go left as long as key<=next_node.key */
@@ -203,8 +208,8 @@ avl_find_greaterequal(const struct avl_tree *tree, const void *key) {
       break;
     }
 
-    next = (struct avl_node *)node->list.prev;
-    diff = (*tree->comp) (key, next->key, tree->cmp_ptr);
+    next = (struct avl_node*)node->list.prev;
+    diff = (*tree->comp)(key, next->key, tree->cmp_ptr);
   }
   return node;
 }
@@ -216,9 +221,7 @@ avl_find_greaterequal(const struct avl_tree *tree, const void *key) {
  * @return 0 if node was inserted successfully, -1 if it was not inserted
  *   because of a key collision
  */
-int
-avl_insert(struct avl_tree *tree, struct avl_node *new)
-{
+int avl_insert(struct avl_tree* tree, struct avl_node* new) {
   struct avl_node *node, *next, *last;
   int diff;
 
@@ -249,11 +252,12 @@ avl_insert(struct avl_tree *tree, struct avl_node *new)
     last = next;
   }
 
-  diff = (*tree->comp) (new->key, node->key, tree->cmp_ptr);
+  diff = (*tree->comp)(new->key, node->key, tree->cmp_ptr);
 
   if (diff == 0) {
-    if (!tree->allow_dups)
+    if (!tree->allow_dups) {
       return -1;
+    }
 
     new->leader = 0;
 
@@ -303,17 +307,14 @@ avl_insert(struct avl_tree *tree, struct avl_node *new)
  * @param tree pointer to tree
  * @param node pointer to node
  */
-void
-avl_delete(struct avl_tree *tree, struct avl_node *node)
-{
-  struct avl_node *next;
-  struct avl_node *parent;
-  struct avl_node *left;
-  struct avl_node *right;
+void avl_delete(struct avl_tree* tree, struct avl_node* node) {
+  struct avl_node* next;
+  struct avl_node* parent;
+  struct avl_node* left;
+  struct avl_node* right;
   if (node->leader) {
-    if (tree->allow_dups
-        && !list_is_last(&node->list, &tree->list_head)
-        && !(next = avl_next(node))->leader) {
+    if (tree->allow_dups && !list_is_last(&node->list, &tree->list_head) &&
+        !(next = avl_next(node))->leader) {
       next->leader = true;
       next->balance = node->balance;
 
@@ -325,49 +326,59 @@ avl_delete(struct avl_tree *tree, struct avl_node *node)
       next->left = left;
       next->right = right;
 
-      if (parent == NULL)
+      if (parent == NULL) {
         tree->root = next;
-
-      else {
-        if (node == parent->left)
-          parent->left = next;
-
-        else
-          parent->right = next;
       }
 
-      if (left != NULL)
-        left->parent = next;
+      else {
+        if (node == parent->left) {
+          parent->left = next;
+        }
 
-      if (right != NULL)
+        else {
+          parent->right = next;
+        }
+      }
+
+      if (left != NULL) {
+        left->parent = next;
+      }
+
+      if (right != NULL) {
         right->parent = next;
+      }
     }
 
-    else
+    else {
       avl_delete_worker(tree, node);
+    }
   }
 
   avl_remove(tree, node);
 }
 
-static struct avl_node *
-avl_find_rec(struct avl_node *node, const void *key, avl_tree_comp comp, void *cmp_ptr, int *cmp_result)
-{
+static struct avl_node* avl_find_rec(struct avl_node* node,
+                                     const void* key,
+                                     avl_tree_comp comp,
+                                     void* cmp_ptr,
+                                     int* cmp_result) {
   int diff;
 
-  diff = (*comp) (key, node->key, cmp_ptr);
+  diff = (*comp)(key, node->key, cmp_ptr);
   *cmp_result = diff;
 
   if (diff < 0) {
-    if (node->left != NULL)
+    if (node->left != NULL) {
       return avl_find_rec(node->left, key, comp, cmp_ptr, cmp_result);
+    }
 
     return node;
   }
 
   if (diff > 0) {
-    if (node->right != NULL)
+    if (node->right != NULL) {
       return avl_find_rec(node->right, key, comp, cmp_ptr, cmp_result);
+    }
 
     return node;
   }
@@ -375,9 +386,7 @@ avl_find_rec(struct avl_node *node, const void *key, avl_tree_comp comp, void *c
   return node;
 }
 
-static void
-avl_rotate_right(struct avl_tree *tree, struct avl_node *node)
-{
+static void avl_rotate_right(struct avl_tree* tree, struct avl_node* node) {
   struct avl_node *left, *parent;
 
   left = node->left;
@@ -386,30 +395,32 @@ avl_rotate_right(struct avl_tree *tree, struct avl_node *node)
   left->parent = parent;
   node->parent = left;
 
-  if (parent == NULL)
+  if (parent == NULL) {
     tree->root = left;
+  }
 
   else {
-    if (parent->left == node)
+    if (parent->left == node) {
       parent->left = left;
+    }
 
-    else
+    else {
       parent->right = left;
+    }
   }
 
   node->left = left->right;
   left->right = node;
 
-  if (node->left != NULL)
+  if (node->left != NULL) {
     node->left->parent = node;
+  }
 
   node->balance += 1 - avl_min(left->balance, 0);
   left->balance += 1 + avl_max(node->balance, 0);
 }
 
-static void
-avl_rotate_left(struct avl_tree *tree, struct avl_node *node)
-{
+static void avl_rotate_left(struct avl_tree* tree, struct avl_node* node) {
   struct avl_node *right, *parent;
 
   right = node->right;
@@ -418,40 +429,44 @@ avl_rotate_left(struct avl_tree *tree, struct avl_node *node)
   right->parent = parent;
   node->parent = right;
 
-  if (parent == NULL)
+  if (parent == NULL) {
     tree->root = right;
+  }
 
   else {
-    if (parent->left == node)
+    if (parent->left == node) {
       parent->left = right;
+    }
 
-    else
+    else {
       parent->right = right;
+    }
   }
 
   node->right = right->left;
   right->left = node;
 
-  if (node->right != NULL)
+  if (node->right != NULL) {
     node->right->parent = node;
+  }
 
   node->balance -= 1 + avl_max(right->balance, 0);
   right->balance -= 1 - avl_min(node->balance, 0);
 }
 
-static void
-post_insert(struct avl_tree *tree, struct avl_node *node)
-{
-  struct avl_node *parent = node->parent;
+static void post_insert(struct avl_tree* tree, struct avl_node* node) {
+  struct avl_node* parent = node->parent;
 
-  if (parent == NULL)
+  if (parent == NULL) {
     return;
+  }
 
   if (node == parent->left) {
     parent->balance--;
 
-    if (parent->balance == 0)
+    if (parent->balance == 0) {
       return;
+    }
 
     if (parent->balance == -1) {
       post_insert(tree, parent);
@@ -470,8 +485,9 @@ post_insert(struct avl_tree *tree, struct avl_node *node)
 
   parent->balance++;
 
-  if (parent->balance == 0)
+  if (parent->balance == 0) {
     return;
+  }
 
   if (parent->balance == 1) {
     post_insert(tree, parent);
@@ -487,34 +503,31 @@ post_insert(struct avl_tree *tree, struct avl_node *node)
   avl_rotate_left(tree, node->parent->parent);
 }
 
-static void
-avl_insert_before(struct avl_tree *tree, struct avl_node *pos_node, struct avl_node *node)
-{
+static void avl_insert_before(struct avl_tree* tree,
+                              struct avl_node* pos_node,
+                              struct avl_node* node) {
   list_add_tail(&node->list, &pos_node->list);
   tree->count++;
 }
 
-static void
-avl_insert_after(struct avl_tree *tree, struct avl_node *pos_node, struct avl_node *node)
-{
+static void avl_insert_after(struct avl_tree* tree,
+                             struct avl_node* pos_node,
+                             struct avl_node* node) {
   list_add(&node->list, &pos_node->list);
   tree->count++;
 }
 
-static void
-avl_remove(struct avl_tree *tree, struct avl_node *node)
-{
+static void avl_remove(struct avl_tree* tree, struct avl_node* node) {
   list_del(&node->list);
   tree->count--;
 }
 
-static void
-avl_post_delete(struct avl_tree *tree, struct avl_node *node)
-{
-  struct avl_node *parent;
+static void avl_post_delete(struct avl_tree* tree, struct avl_node* node) {
+  struct avl_node* parent;
 
-  if ((parent = node->parent) == NULL)
+  if ((parent = node->parent) == NULL) {
     return;
+  }
 
   if (node == parent->left) {
     parent->balance++;
@@ -524,8 +537,9 @@ avl_post_delete(struct avl_tree *tree, struct avl_node *node)
       return;
     }
 
-    if (parent->balance == 1)
+    if (parent->balance == 1) {
       return;
+    }
 
     if (parent->right->balance == 0) {
       avl_rotate_left(tree, parent);
@@ -551,8 +565,9 @@ avl_post_delete(struct avl_tree *tree, struct avl_node *node)
     return;
   }
 
-  if (parent->balance == -1)
+  if (parent->balance == -1) {
     return;
+  }
 
   if (parent->left->balance == 0) {
     avl_rotate_right(tree, parent);
@@ -570,11 +585,10 @@ avl_post_delete(struct avl_tree *tree, struct avl_node *node)
   avl_post_delete(tree, parent->parent);
 }
 
-static struct avl_node *
-avl_local_min(struct avl_node *node)
-{
-  while (node->left != NULL)
+static struct avl_node* avl_local_min(struct avl_node* node) {
+  while (node->left != NULL) {
     node = node->left;
+  }
 
   return node;
 }
@@ -590,9 +604,7 @@ avl_local_max(struct avl_node *node)
 }
 #endif
 
-static void
-avl_delete_worker(struct avl_tree *tree, struct avl_node *node)
-{
+static void avl_delete_worker(struct avl_tree* tree, struct avl_node* node) {
   struct avl_node *parent, *min;
 
   parent = node->parent;
@@ -607,8 +619,9 @@ avl_delete_worker(struct avl_tree *tree, struct avl_node *node)
       parent->left = NULL;
       parent->balance++;
 
-      if (parent->balance == 1)
+      if (parent->balance == 1) {
         return;
+      }
 
       if (parent->balance == 0) {
         avl_post_delete(tree, parent);
@@ -636,8 +649,9 @@ avl_delete_worker(struct avl_tree *tree, struct avl_node *node)
       parent->right = NULL;
       parent->balance--;
 
-      if (parent->balance == -1)
+      if (parent->balance == -1) {
         return;
+      }
 
       if (parent->balance == 0) {
         avl_post_delete(tree, parent);
@@ -672,11 +686,13 @@ avl_delete_worker(struct avl_tree *tree, struct avl_node *node)
     assert(node->right);
     node->right->parent = parent;
 
-    if (parent->left == node)
+    if (parent->left == node) {
       parent->left = node->right;
+    }
 
-    else
+    else {
       parent->right = node->right;
+    }
 
     avl_post_delete(tree, node->right);
     return;
@@ -691,11 +707,13 @@ avl_delete_worker(struct avl_tree *tree, struct avl_node *node)
 
     node->left->parent = parent;
 
-    if (parent->left == node)
+    if (parent->left == node) {
       parent->left = node->left;
+    }
 
-    else
+    else {
       parent->right = node->left;
+    }
 
     avl_post_delete(tree, node->left);
     return;
@@ -710,11 +728,13 @@ avl_delete_worker(struct avl_tree *tree, struct avl_node *node)
   min->left = node->left;
   min->right = node->right;
 
-  if (min->left != NULL)
+  if (min->left != NULL) {
     min->left->parent = min;
+  }
 
-  if (min->right != NULL)
+  if (min->right != NULL) {
     min->right->parent = min;
+  }
 
   if (parent == NULL) {
     tree->root = min;
