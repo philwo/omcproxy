@@ -17,8 +17,8 @@
  *
  */
 
-#include <netinet/in.h>
 #include <cstring>
+#include <netinet/in.h>
 #include <sys/socket.h>
 
 #include "querier.h"

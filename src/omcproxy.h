@@ -23,12 +23,13 @@
 #define L_PREFIX ""
 #endif /* !L_PREFIX */
 
-#include <libubox/utils.h>
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
 #include <sys/types.h>
 #include <syslog.h>
-#include <ctime>
+
+#include <libubox/utils.h>
 
 typedef int64_t omcp_time_t;
 #define OMCP_TIME_MAX INT64_MAX

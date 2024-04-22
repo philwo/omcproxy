@@ -19,16 +19,13 @@
 
 #pragma once
 
-#include <libubox/list.h>
+#include <linux/icmpv6.h>
+#include <linux/igmp.h>
+#include <netinet/icmp6.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
-#include <netinet/icmp6.h>
-
-#define icmp6_filter icmpv6_filter
-#include <linux/icmpv6.h>
-#include <linux/igmp.h>
-#undef icmp6_filter
+#include <libubox/list.h>
 
 #define MRIB_DEFAULT_LIFETIME 125
 

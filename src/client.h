@@ -19,8 +19,9 @@
 
 #pragma once
 
-#include <netinet/in.h>
 #include <cstdlib>
+#include <netinet/in.h>
+
 #include "omcproxy.h"
 
 struct client {

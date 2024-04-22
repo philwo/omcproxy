@@ -19,10 +19,9 @@
 
 #include <arpa/inet.h>
 #include <cstdlib>
-#include <sys/socket.h>
-
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
 #include <unistd.h>
 
 #include "mrib.h"

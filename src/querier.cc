@@ -17,10 +17,11 @@
  *
  */
 
-#include <libubox/list.h>
-#include <netinet/in.h>
 #include <cstdlib>
 #include <cstring>
+#include <netinet/in.h>
+
+#include <libubox/list.h>
 
 #include "querier.h"
 

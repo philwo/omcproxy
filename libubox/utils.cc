@@ -16,9 +16,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "utils.h"
 #include <cerrno>
 #include <cstring>
+
+#include "utils.h"
 
 int mkdir_p(char* dir, mode_t mask) {
   char* l;

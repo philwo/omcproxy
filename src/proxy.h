@@ -17,8 +17,8 @@
 
 #pragma once
 
-#include <netinet/in.h>
 #include <cstdint>
+#include <netinet/in.h>
 
 // minimum scope to proxy (use only one, includes higher scopes)
 // source: https://datatracker.ietf.org/doc/html/rfc7346#section-2

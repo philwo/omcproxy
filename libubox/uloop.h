@@ -18,10 +18,10 @@
 
 #pragma once
 
-#include <sys/time.h>
-#include <sys/types.h>
 #include <csignal>
 #include <cstdint>
+#include <sys/time.h>
+#include <sys/types.h>
 
 #include "list.h"
 

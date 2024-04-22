@@ -15,23 +15,22 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include <sys/time.h>
-#include <sys/types.h>
 
-#include <fcntl.h>
-#include <poll.h>
-#include <unistd.h>
 #include <cerrno>
 #include <climits>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
+#include <poll.h>
+#include <sys/epoll.h>
+#include <sys/time.h>
+#include <sys/timerfd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "uloop.h"
 #include "utils.h"
-
-#include <sys/epoll.h>
-#include <sys/timerfd.h>
-#include <sys/wait.h>
 
 struct uloop_fd_event {
   struct uloop_fd* fd;

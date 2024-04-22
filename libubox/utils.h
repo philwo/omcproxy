@@ -18,12 +18,12 @@
 
 #pragma once
 
+#include <cstdint>
+#include <ctime>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <cstdint>
-#include <ctime>
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))

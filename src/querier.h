@@ -19,12 +19,13 @@
 
 #pragma once
 
+#include <cstring>
+#include <net/if.h>
+#include <netinet/in.h>
+
 #include <libubox/avl.h>
 #include <libubox/list.h>
 #include <libubox/uloop.h>
-#include <net/if.h>
-#include <netinet/in.h>
-#include <cstring>
 
 #include "groups.h"
 #include "mrib.h"

@@ -18,13 +18,11 @@
  */
 
 #include <alloca.h>
+#include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
-#include <unistd.h>
-
-#include <arpa/inet.h>
-#include <libubox/list.h>
 #include <netinet/in.h>
+#include <unistd.h>
 
 #include "client.h"
 

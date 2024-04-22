@@ -17,9 +17,10 @@
  *
  */
 
-#include "groups.h"
 #include <cstdlib>
 #include <cstring>
+
+#include "groups.h"
 
 bool group_is_included(const struct group* group, omcp_time_t time) {
   return group->exclude_until <= time;
