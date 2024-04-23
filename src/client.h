@@ -24,20 +24,20 @@
 
 #include "omcproxy.h"
 
-struct client {
+struct Client {
   int igmp_fd;
   int mld_fd;
   int ifindex;
 };
 
 // Register a new interface to proxy
-int client_init(struct client* client, int ifindex);
+int client_init(struct Client* client, int ifindex);
 
 // Deregister a new interface from proxy
-void client_deinit(struct client* client);
+void client_deinit(struct Client* client);
 
 // Set / update / delete a multicast proxy entry
-int client_set(struct client* client,
+int client_set(struct Client* client,
                const struct in6_addr* group,
                bool include,
                const struct in6_addr sources[],

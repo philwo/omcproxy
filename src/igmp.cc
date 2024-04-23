@@ -24,12 +24,12 @@
 #include "querier.h"
 
 // Test if multicast-group is valid and relevant
-static bool igmp_is_valid_group(in_addr_t group) {
-  return IN_MULTICAST(be32_to_cpu(group));
+static bool igmp_is_valid_group(in_addr_t Group) {
+  return IN_MULTICAST(be32_to_cpu(Group));
 }
 
 // Handle an IGMP-record from an IGMP-packet (called by igmp_receive)
-static ssize_t igmp_handle_record(struct groups* groups,
+static ssize_t igmp_handle_record(struct Groups* groups,
                                   const uint8_t* data,
                                   size_t len) {
   auto* r = (struct igmpv3_grec*)data;
@@ -56,21 +56,21 @@ static ssize_t igmp_handle_record(struct groups* groups,
     }
 
     groups_update_state(groups, &addr, sources, nsrc,
-                        static_cast<groups_update>(r->grec_type));
+                        static_cast<GroupsUpdate>(r->grec_type));
   }
 
   return read;
 }
 
 // Receive and parse an IGMP-packet (called by uloop as callback)
-void igmp_handle(struct mrib_querier* mrib,
+void igmp_handle(struct MribQuerier* mrib,
                  const struct igmphdr* igmp,
                  size_t len,
                  const struct sockaddr_in* from) {
-  struct querier_iface* q = container_of(mrib, struct querier_iface, mrib);
+  struct QuerierIface* q = container_of(mrib, struct QuerierIface, mrib);
   omcp_time_t now = omcp_time();
   char addrbuf[INET_ADDRSTRLEN];
-  struct in6_addr group{};
+  struct in6_addr group {};
 
   querier_map(&group, igmp->group);
   inet_ntop(AF_INET, &from->sin_addr, addrbuf, sizeof(addrbuf));
@@ -182,12 +182,12 @@ void igmp_handle(struct mrib_querier* mrib,
 }
 
 // Send generic / group-specific / group-and-source specific IGMP-query
-int igmp_send_query(struct querier_iface* q,
-                    const struct in6_addr* group,
-                    const struct list_head* sources,
+int igmp_send_query(struct QuerierIface* q,
+                    const struct in6_addr* Group,
+                    const struct ListHead* sources,
                     bool suppress) {
   uint8_t qqic =
-      querier_qqic(((group) ? q->groups.cfg_v4.last_listener_query_interval
+      querier_qqic(((Group) ? q->groups.cfg_v4.last_listener_query_interval
                             : q->groups.cfg_v4.query_response_interval) /
                    100);
   struct {
@@ -201,7 +201,7 @@ int igmp_send_query(struct querier_iface* q,
                  .qqic = querier_qqic(q->groups.cfg_v4.query_interval / 1000),
              }};
 
-  struct group_source* s;
+  struct GroupSource* s;
   size_t cnt = 0;
   if (sources) {
     list_for_each_entry(s, sources, head) {
@@ -212,8 +212,8 @@ int igmp_send_query(struct querier_iface* q,
 
   struct sockaddr_in dest = {.sin_family = AF_INET,
                              .sin_addr = {htonl(0xe0000001U)}};
-  if (group) {
-    query.q.group = querier_unmap(group);
+  if (Group) {
+    query.q.group = querier_unmap(Group);
     dest.sin_addr.s_addr = query.q.group;
   }
 

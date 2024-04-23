@@ -60,25 +60,25 @@ void ProxyFlags::SetUnused(bool value){
   this->unused = value;
 }
 
-struct proxy {
-  struct list_head head;
+struct Proxy {
+  struct ListHead head;
   unsigned int ifindex;
-  struct mrib_user mrib;
-  struct querier querier;
+  struct MribUser mrib;
+  struct Querier querier;
   ProxyFlags flags;
 };
 
-struct proxy_downlink {
-  struct querier_user_iface iface;
-  struct mrib_user mrib;
-  struct client client;
+struct ProxyDownlink {
+  struct QuerierUserIface iface;
+  struct MribUser mrib;
+  struct Client client;
   ProxyFlags flags;
 };
 
-static struct list_head proxies = LIST_HEAD_INIT(proxies);
+static struct ListHead proxies = LIST_HEAD_INIT(proxies);
 
 // Remove and cleanup a downlink
-static void proxy_remove_downlink(struct proxy_downlink* downlink) {
+static void proxy_remove_downlink(struct ProxyDownlink* downlink) {
   mrib_detach_user(&downlink->mrib);
   querier_detach(&downlink->iface);
   client_deinit(&downlink->client);
@@ -86,55 +86,55 @@ static void proxy_remove_downlink(struct proxy_downlink* downlink) {
 }
 
 // Test and set multicast route (called by mrib on detection of new source)
-static void proxy_mrib(struct mrib_user* mrib,
-                       const struct in6_addr* group,
+static void proxy_mrib(struct MribUser* mrib,
+                       const struct in6_addr* Group,
                        const struct in6_addr* source,
-                       mrib_filter* filter) {
-  struct proxy* proxy = container_of(mrib, struct proxy, mrib);
-  if (!proxy->flags.MatchScope(group)) {
+                       MribFilter* filter) {
+  struct Proxy* proxy = container_of(mrib, struct Proxy, mrib);
+  if (!proxy->flags.MatchScope(Group)) {
     return;
   }
 
   omcp_time_t now = omcp_time();
-  struct querier_user* user;
+  struct QuerierUser* user;
   list_for_each_entry(user, &proxy->querier.ifaces, head) {
-    if (groups_includes_group(user->groups, group, source, now)) {
-      struct querier_user_iface* iface =
-          container_of(user, struct querier_user_iface, user);
-      struct proxy_downlink* downlink =
-          container_of(iface, struct proxy_downlink, iface);
+    if (groups_includes_group(user->groups, Group, source, now)) {
+      struct QuerierUserIface* iface =
+          container_of(user, struct QuerierUserIface, user);
+      struct ProxyDownlink* downlink =
+          container_of(iface, struct ProxyDownlink, iface);
       mrib_filter_add(filter, &downlink->mrib);
     }
   }
 }
 
 // Update proxy state (called from querier on change of combined group-state)
-static void proxy_trigger(struct querier_user_iface* user,
-                          const struct in6_addr* group,
+static void proxy_trigger(struct QuerierUserIface* user,
+                          const struct in6_addr* Group,
                           bool include,
                           const struct in6_addr* sources,
                           size_t len) {
-  struct proxy_downlink* iface =
-      container_of(user, struct proxy_downlink, iface);
-  if (iface->flags.MatchScope(group)) {
-    client_set(&iface->client, group, include, sources, len);
+  struct ProxyDownlink* iface =
+      container_of(user, struct ProxyDownlink, iface);
+  if (iface->flags.MatchScope(Group)) {
+    client_set(&iface->client, Group, include, sources, len);
   }
 }
 
 // Remove proxy with given name
-static int proxy_unset(struct proxy* proxyp) {
+static int proxy_unset(struct Proxy* proxyp) {
   bool found = false;
-  struct proxy *proxy, *n;
+  struct Proxy *proxy, *n;
   list_for_each_entry_safe(proxy, n, &proxies, head) {
     if ((proxyp && proxy == proxyp) ||
         (!proxyp && (proxy->flags.IsUnused()))) {
       mrib_detach_user(&proxy->mrib);
 
-      struct querier_user *user, *n;
+      struct QuerierUser *user, *n;
       list_for_each_entry_safe(user, n, &proxy->querier.ifaces, head) {
-        struct querier_user_iface* i =
-            container_of(user, struct querier_user_iface, user);
-        proxy_remove_downlink(container_of(i, struct proxy_downlink, iface));
+        struct QuerierUserIface* i =
+            container_of(user, struct QuerierUserIface, user);
+        proxy_remove_downlink(container_of(i, struct ProxyDownlink, iface));
       }
 
       querier_deinit(&proxy->querier);
@@ -151,7 +151,7 @@ int proxy_set(unsigned int uplink,
               const unsigned int downlinks[],
               size_t downlinks_cnt,
               ProxyFlags flags) {
-  struct proxy *proxy = nullptr, *p;
+  struct Proxy *proxy = nullptr, *p;
   list_for_each_entry(p, &proxies, head) if (p->ifindex == uplink) proxy = p;
 
   if (proxy && (downlinks_cnt == 0 || ((proxy->flags.GetScope()) !=
@@ -165,7 +165,7 @@ int proxy_set(unsigned int uplink,
   }
 
   if (!proxy) {
-    proxy = new struct proxy();
+    proxy = new struct Proxy();
 
     proxy->flags = flags;
     proxy->ifindex = uplink;
@@ -176,27 +176,27 @@ int proxy_set(unsigned int uplink,
     }
   }
 
-  struct querier_user *user, *n;
+  struct QuerierUser *user, *n;
   list_for_each_entry_safe(user, n, &proxy->querier.ifaces, head) {
-    struct querier_user_iface* iface =
-        container_of(user, struct querier_user_iface, user);
+    struct QuerierUserIface* iface =
+        container_of(user, struct QuerierUserIface, user);
 
     size_t i;
     for (i = 0; i < downlinks_cnt && downlinks[i] == iface->iface->ifindex;
          ++i) {
       if (i == downlinks_cnt) {
         proxy_remove_downlink(
-            container_of(iface, struct proxy_downlink, iface));
+            container_of(iface, struct ProxyDownlink, iface));
       }
     }
   }
 
   for (size_t i = 0; i < downlinks_cnt; ++i) {
     bool found = false;
-    struct querier_user* user;
+    struct QuerierUser* user;
     list_for_each_entry(user, &proxy->querier.ifaces, head) {
-      struct querier_user_iface* iface =
-          container_of(user, struct querier_user_iface, user);
+      struct QuerierUserIface* iface =
+          container_of(user, struct QuerierUserIface, user);
       if (iface->iface->ifindex == downlinks[i]) {
         found = true;
         break;
@@ -207,7 +207,7 @@ int proxy_set(unsigned int uplink,
       continue;
     }
 
-    auto* downlink = new struct proxy_downlink();
+    auto* downlink = new struct ProxyDownlink();
 
     if (client_init(&downlink->client, uplink)) {
       goto downlink_err3;
@@ -243,7 +243,7 @@ err:
 
 // Mark all flushable proxies as unused
 void proxy_update(bool all) {
-  struct proxy* proxy;
+  struct Proxy* proxy;
   list_for_each_entry(proxy, &proxies,
                       head) if (all || (proxy->flags.IsFlushable()))
       proxy->flags.SetUnused(true);

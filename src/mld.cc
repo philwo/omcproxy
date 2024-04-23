@@ -27,7 +27,7 @@
 #include "mrib.h"
 #include "querier.h"
 
-struct mld_query {
+struct MLDQuery {
   struct mld_hdr mld;
   uint8_t s_qrv;
   uint8_t qqic;
@@ -41,16 +41,16 @@ static bool mld_is_valid_group(const struct in6_addr* addr) {
 }
 
 // Handle Multicast Address Record from MLD-Packets (called by mld_receive)
-static ssize_t mld_handle_record(struct groups* groups,
+static ssize_t mld_handle_record(struct Groups* groups,
                                  const uint8_t* data,
                                  size_t len) {
-  struct mld_record {
+  struct MLDRecord {
     uint8_t type;
     uint8_t aux;
     uint16_t nsrc;
     struct in6_addr addr;
     struct in6_addr sources[];
-  }* r = (struct mld_record*)data;
+  }* r = (struct MLDRecord*)data;
 
   if (len < sizeof(*r)) {
     return -1;
@@ -65,14 +65,14 @@ static ssize_t mld_handle_record(struct groups* groups,
   if (r->type >= UPDATE_IS_INCLUDE && r->type <= UPDATE_BLOCK &&
       mld_is_valid_group(&r->addr)) {
     groups_update_state(groups, &r->addr, r->sources, nsrc,
-                        static_cast<groups_update>(r->type));
+                        static_cast<GroupsUpdate>(r->type));
   }
 
   return read;
 }
 
 // Receive an MLD-Packet from a node (called by uloop as callback)
-void mld_handle(struct mrib_querier* mrib,
+void mld_handle(struct MribQuerier* mrib,
                 const struct mld_hdr* hdr,
                 size_t len,
                 const struct sockaddr_in6* from) {
@@ -80,9 +80,9 @@ void mld_handle(struct mrib_querier* mrib,
   omcp_time_t now = omcp_time();
   inet_ntop(AF_INET6, &hdr->mld_addr, addrbuf, sizeof(addrbuf));
 
-  struct querier_iface* q = container_of(mrib, struct querier_iface, mrib);
+  struct QuerierIface* q = container_of(mrib, struct QuerierIface, mrib);
   if (hdr->mld_icmp6_hdr.icmp6_type == ICMPV6_MGM_QUERY) {
-    auto* query = (struct mld_query*)hdr;
+    auto* query = (struct MLDQuery*)hdr;
 
     if (len != 24 &&
         ((size_t)len < sizeof(*query) ||
@@ -181,15 +181,15 @@ void mld_handle(struct mrib_querier* mrib,
 }
 
 // Send generic / group-specific / group-and-source-specific queries
-ssize_t mld_send_query(struct querier_iface* q,
+ssize_t mld_send_query(struct QuerierIface* q,
                        const struct in6_addr* group,
-                       const struct list_head* sources,
+                       const struct ListHead* sources,
                        bool suppress) {
   uint16_t mrc =
       querier_mrc((group) ? q->groups.cfg_v6.last_listener_query_interval
                           : q->groups.cfg_v6.query_response_interval);
   struct {
-    struct mld_query q;
+    struct MLDQuery q;
     struct in6_addr addrs[QUERIER_MAX_SOURCE];
   } query = {
       .q = {
@@ -202,7 +202,7 @@ ssize_t mld_send_query(struct querier_iface* q,
           .qqic = querier_qqic(q->groups.cfg_v6.query_interval / 1000),
       }};
 
-  struct group_source* s;
+  struct GroupSource* s;
   size_t cnt = 0;
   if (sources) {
     list_for_each_entry(s, sources, head) {

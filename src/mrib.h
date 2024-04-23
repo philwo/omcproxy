@@ -19,11 +19,14 @@
 
 #pragma once
 
-#include <linux/icmpv6.h>
-#include <linux/igmp.h>
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+
+#define icmp6_filter icmpv6_filter
+#include <linux/icmpv6.h>
+#include <linux/igmp.h>
+#undef icmp6_filter
 
 #include <libubox/list.h>
 
@@ -37,71 +40,71 @@
   }
 #define INADDR_ALLIGMPV3RTRS_GROUP cpu_to_be32(0xe0000016U)
 
-typedef uint32_t mrib_filter;
-struct mrib_iface;
-struct mrib_user;
-struct mrib_querier;
+typedef uint32_t MribFilter;
+struct MribIface;
+struct MribUser;
+struct MribQuerier;
 
-typedef void(mrib_cb)(struct mrib_user* user,
-                      const struct in6_addr* group,
+typedef void(MribCallback)(struct MribUser* user,
+                      const struct in6_addr* Group,
                       const struct in6_addr* source,
-                      mrib_filter* filter);
+                      MribFilter* filter);
 
-typedef void(mrib_igmp_cb)(struct mrib_querier* mrib,
+typedef void(MribIGMPCallback)(struct MribQuerier* mrib,
                            const struct igmphdr* igmp,
                            size_t len,
                            const struct sockaddr_in* from);
 
-typedef void(mrib_mld_cb)(struct mrib_querier* mrib,
+typedef void(MribMLDCallback)(struct MribQuerier* mrib,
                           const struct mld_hdr* mld,
                           size_t len,
                           const struct sockaddr_in6* from);
 
-struct mrib_user {
-  struct list_head head;
-  struct mrib_iface* iface;
-  mrib_cb* cb_newsource;
+struct MribUser {
+  struct ListHead head;
+  struct MribIface* iface;
+  MribCallback* cb_newsource;
 };
 
-struct mrib_querier {
-  struct list_head head;
-  struct mrib_iface* iface;
-  mrib_igmp_cb* cb_igmp;
-  mrib_mld_cb* cb_mld;
+struct MribQuerier {
+  struct ListHead head;
+  struct MribIface* iface;
+  MribIGMPCallback* cb_igmp;
+  MribMLDCallback* cb_mld;
 };
 
 // Register a new user to mrib
-int mrib_attach_user(struct mrib_user* user,
+int mrib_attach_user(struct MribUser* user,
                      int ifindex,
-                     mrib_cb* cb_newsource);
+                     MribCallback* cb_newsource);
 
 // Deregister a user from mrib
-void mrib_detach_user(struct mrib_user* user);
+void mrib_detach_user(struct MribUser* user);
 
 // Register a querier to mrib
-int mrib_attach_querier(struct mrib_querier* querier,
+int mrib_attach_querier(struct MribQuerier* querier,
                         int ifindex,
-                        mrib_igmp_cb* cb_igmp,
-                        mrib_mld_cb* cb_mld);
+                        MribIGMPCallback* cb_igmp,
+                        MribMLDCallback* cb_mld);
 
 // Deregister a querier from mrib
-void mrib_detach_querier(struct mrib_querier* querier);
+void mrib_detach_querier(struct MribQuerier* querier);
 
 // Add interface to filter
-int mrib_filter_add(mrib_filter* filter, struct mrib_user* user);
+int mrib_filter_add(MribFilter* filter, struct MribUser* user);
 
 // Send IGMP-packet
-int mrib_send_igmp(struct mrib_querier* querier,
+int mrib_send_igmp(struct MribQuerier* querier,
                    struct igmpv3_query* igmp,
                    size_t len,
                    const struct sockaddr_in* dest);
 
 // Send MLD-packet
-int mrib_send_mld(struct mrib_querier* querier,
+int mrib_send_mld(struct MribQuerier* querier,
                   struct mld_hdr* mld,
                   size_t len,
                   const struct sockaddr_in6* dest);
 
 // Get source address
-int mrib_mld_source(struct mrib_querier* q, struct in6_addr* source);
-int mrib_igmp_source(struct mrib_querier* q, struct in_addr* source);
+int mrib_mld_source(struct MribQuerier* q, struct in6_addr* source);
+int mrib_igmp_source(struct MribQuerier* q, struct in_addr* source);

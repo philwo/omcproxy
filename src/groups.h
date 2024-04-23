@@ -26,10 +26,10 @@
 
 #include "omcproxy.h"
 
-struct group {
-  struct avl_node node;
+struct Group {
+  struct AvlNode node;
   struct in6_addr addr;
-  struct list_head sources;
+  struct ListHead sources;
   size_t source_count;
   omcp_time_t exclude_until;
   omcp_time_t compat_v2_until;
@@ -39,14 +39,14 @@ struct group {
   int retransmit;
 };
 
-struct group_source {
-  struct list_head head;
+struct GroupSource {
+  struct ListHead head;
   struct in6_addr addr;
   omcp_time_t include_until;
   int retransmit;
 };
 
-struct groups_config {
+struct GroupsConfig {
   omcp_time_t query_response_interval;
   omcp_time_t query_interval;
   omcp_time_t last_listener_query_interval;
@@ -54,24 +54,23 @@ struct groups_config {
   int last_listener_query_count;
 };
 
-struct groups {
-  struct groups_config cfg_v4;
-  struct groups_config cfg_v6;
-  struct avl_tree groups;
-  struct uloop_timeout timer;
+struct Groups {
+  struct GroupsConfig cfg_v4;
+  struct GroupsConfig cfg_v6;
+  struct AvlTree groups;
+  struct UloopTimeout timer;
   size_t source_limit;
-  void (*cb_query)(struct groups* g,
+  void (*cb_query)(struct Groups* g,
                    const struct in6_addr* addr,
-                   const struct list_head* sources,
+                   const struct ListHead* sources,
                    bool suppress);
-  void (*cb_update)(struct groups* g, struct group* group, omcp_time_t now);
+  void (*cb_update)(struct Groups* g, struct Group* group, omcp_time_t now);
 };
 
-void groups_init(struct groups* groups);
-void groups_deinit(struct groups* groups);
+void groups_init(struct Groups* groups);
+void groups_deinit(struct Groups* groups);
 
-
-enum groups_update {
+enum GroupsUpdate {
   UPDATE_NONE = 0,
   UPDATE_IS_INCLUDE = 1,
   UPDATE_IS_EXCLUDE = 2,
@@ -86,28 +85,28 @@ enum groups_update {
   UPDATE_SET_EX = 0x12,
 };
 
-void groups_update_config(struct groups* groups,
+void groups_update_config(struct Groups* groups,
                           bool v6,
                           omcp_time_t query_response_interval,
                           omcp_time_t query_interval,
                           int robustness);
 
-void groups_update_timers(struct groups* groups,
+void groups_update_timers(struct Groups* groups,
                           const struct in6_addr* groupaddr,
                           const struct in6_addr* addrs,
                           size_t len);
 
-void groups_update_state(struct groups* groups,
+void groups_update_state(struct Groups* groups,
                          const struct in6_addr* groupaddr,
                          const struct in6_addr* addrs,
                          size_t len,
-                         enum groups_update update);
+                         enum GroupsUpdate update);
 
 // Groups user query API
 
-bool group_is_included(const struct group* group, omcp_time_t time);
+bool group_is_included(const struct Group* group, omcp_time_t time);
 
-bool source_is_included(const struct group_source* source, omcp_time_t time);
+bool source_is_included(const struct GroupSource* source, omcp_time_t time);
 
 #define groups_for_each_group(group, groupsp) \
   avl_for_each_element(&(groupsp)->groups, group, node)
@@ -120,7 +119,7 @@ bool source_is_included(const struct group_source* source, omcp_time_t time);
                       head) if (source_is_included(source, time) == \
                                 group_is_included(group, time))
 
-bool groups_includes_group(struct groups* groups,
+bool groups_includes_group(struct Groups* groups,
                            const struct in6_addr* addr,
                            const struct in6_addr* src,
                            omcp_time_t time);

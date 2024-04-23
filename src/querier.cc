@@ -25,7 +25,7 @@
 
 #include "querier.h"
 
-static struct list_head ifaces = LIST_HEAD_INIT(ifaces);
+static struct ListHead ifaces = LIST_HEAD_INIT(ifaces);
 
 in_addr_t querier_unmap(const struct in6_addr* addr6) {
   return addr6->s6_addr32[3];
@@ -39,16 +39,16 @@ void querier_map(struct in6_addr* addr6, in_addr_t addr4) {
 }
 
 // Handle querier update event from a querier-interface
-static void querier_announce_iface(struct querier_user_iface* user,
+static void querier_announce_iface(struct QuerierUserIface* user,
                                    omcp_time_t now,
-                                   const struct group* group,
+                                   const struct Group* group,
                                    bool enabled) {
   bool include = true;
   size_t cnt = 0;
   struct in6_addr sources[group->source_count];
 
   if (enabled) {
-    struct group_source* source;
+    struct GroupSource* source;
     group_for_each_active_source(source, group, now) sources[cnt++] =
         source->addr;
 
@@ -62,43 +62,43 @@ static void querier_announce_iface(struct querier_user_iface* user,
 
 // Handle changes from a querier for a given group (called by a group-state as
 // callback)
-static void querier_announce_change(struct groups* groups,
-                                    struct group* group,
+static void querier_announce_change(struct Groups* groups,
+                                    struct Group* group,
                                     omcp_time_t now) {
-  struct querier_iface* iface =
-      container_of(groups, struct querier_iface, groups);
+  struct QuerierIface* iface =
+      container_of(groups, struct QuerierIface, groups);
 
   // Only recognize changes to non-link-local groups
-  struct querier_user_iface* user;
+  struct QuerierUserIface* user;
   list_for_each_entry(user, &iface->users, head)
       querier_announce_iface(user, now, group, true);
 }
 
 // Send query for a group + sources (called by a group-state as callback)
-static void querier_send_query(struct groups* groups,
-                               const struct in6_addr* group,
-                               const struct list_head* sources,
+static void querier_send_query(struct Groups* groups,
+                               const struct in6_addr* Group,
+                               const struct ListHead* sources,
                                bool suppress) {
-  struct querier_iface* iface =
-      container_of(groups, struct querier_iface, groups);
+  struct QuerierIface* iface =
+      container_of(groups, struct QuerierIface, groups);
   char addrbuf[INET6_ADDRSTRLEN] = "::";
-  inet_ntop(AF_INET6, group, addrbuf, sizeof(addrbuf));
+  inet_ntop(AF_INET6, Group, addrbuf, sizeof(addrbuf));
 
   L_DEBUG("%s: sending %s-specific query for %s on %d (S: %d)", __FUNCTION__,
           (!sources) ? "group" : "source", addrbuf, iface->ifindex, suppress);
 
-  bool v4 = IN6_IS_ADDR_V4MAPPED(group);
+  bool v4 = IN6_IS_ADDR_V4MAPPED(Group);
   if (v4 && !iface->igmp_other_querier) {
-    igmp_send_query(iface, group, sources, suppress);
+    igmp_send_query(iface, Group, sources, suppress);
   } else if (!v4 && !iface->mld_other_querier) {
-    mld_send_query(iface, group, sources, suppress);
+    mld_send_query(iface, Group, sources, suppress);
   }
 }
 
 // Expire interface timers and send queries (called by timer as callback)
-static void querier_iface_timer(struct uloop_timeout* timeout) {
-  struct querier_iface* iface =
-      container_of(timeout, struct querier_iface, timeout);
+static void querier_iface_timer(struct UloopTimeout* timeout) {
+  struct QuerierIface* iface =
+      container_of(timeout, struct QuerierIface, timeout);
   omcp_time_t now = omcp_time();
   omcp_time_t next_event = now + 3600 * OMCP_TIME_PER_SECOND;
 
@@ -206,11 +206,11 @@ uint16_t querier_mrc(int mrd) {
 }
 
 // Attach an interface to a querier-instance
-int querier_attach(struct querier_user_iface* user,
-                   struct querier* querier,
+int querier_attach(struct QuerierUserIface* user,
+                   struct Querier* querier,
                    int ifindex,
-                   querier_iface_cb* cb) {
-  struct querier_iface *c, *iface = nullptr;
+                   QuerierIfaceCallback* cb) {
+  struct QuerierIface *c, *iface = nullptr;
   list_for_each_entry(c, &ifaces, head) {
     if (c->ifindex == ifindex) {
       iface = c;
@@ -221,7 +221,7 @@ int querier_attach(struct querier_user_iface* user,
   omcp_time_t now = omcp_time();
   int res = 0;
   if (iface == nullptr) {
-    iface = new querier_iface();
+    iface = new QuerierIface();
 
     list_add(&iface->head, &ifaces);
     INIT_LIST_HEAD(&iface->users);
@@ -253,7 +253,7 @@ out:
   user->user.querier = querier;
   user->user.groups = &iface->groups;
 
-  struct group* group;
+  struct Group* group;
   groups_for_each_group(group, &iface->groups)
       querier_announce_iface(user, now, group, true);
 
@@ -264,13 +264,13 @@ out:
 }
 
 // Detach an interface from a querier-instance
-void querier_detach(struct querier_user_iface* user) {
-  struct querier_iface* iface = user->iface;
+void querier_detach(struct QuerierUserIface* user) {
+  struct QuerierIface* iface = user->iface;
   list_del(&user->user.head);
   list_del(&user->head);
 
   omcp_time_t now = omcp_time();
-  struct group* group;
+  struct Group* group;
   groups_for_each_group(group, &iface->groups)
       querier_announce_iface(user, now, group, false);
 
@@ -284,15 +284,15 @@ void querier_detach(struct querier_user_iface* user) {
 }
 
 // Initialize querier-instance
-int querier_init(struct querier* querier) {
+int querier_init(struct Querier* querier) {
   memset(querier, 0, sizeof(*querier));
   INIT_LIST_HEAD(&querier->ifaces);
   return 0;
 }
 
 // Cleanup querier-instance
-void querier_deinit(struct querier* querier) {
-  struct querier_user *user, *n;
+void querier_deinit(struct Querier* querier) {
+  struct QuerierUser *user, *n;
   list_for_each_entry_safe(user, n, &querier->ifaces, head)
-      querier_detach(container_of(user, struct querier_user_iface, user));
+      querier_detach(container_of(user, struct QuerierUserIface, user));
 }

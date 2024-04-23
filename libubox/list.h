@@ -47,31 +47,31 @@
   })
 #endif
 
-struct list_head {
-  struct list_head* next;
-  struct list_head* prev;
+struct ListHead {
+  struct ListHead* next;
+  struct ListHead* prev;
 };
 
 #define LIST_HEAD_INIT(name) \
   { &(name), &(name) }
 #undef LIST_HEAD
-#define LIST_HEAD(name) struct list_head name = LIST_HEAD_INIT(name)
+#define LIST_HEAD(name) struct ListHead name = LIST_HEAD_INIT(name)
 
-void INIT_LIST_HEAD(struct list_head* list);
+void INIT_LIST_HEAD(struct ListHead* list);
 
-bool list_empty(const struct list_head* head);
+bool list_empty(const struct ListHead* head);
 
-bool list_is_first(const struct list_head* list, const struct list_head* head);
+bool list_is_first(const struct ListHead* list, const struct ListHead* head);
 
-bool list_is_last(const struct list_head* list, const struct list_head* head);
+bool list_is_last(const struct ListHead* list, const struct ListHead* head);
 
-void _list_del(struct list_head* entry);
+void _list_del(struct ListHead* entry);
 
-void list_del(struct list_head* entry);
+void list_del(struct ListHead* entry);
 
-void _list_add(struct list_head* _new,
-               struct list_head* prev,
-               struct list_head* next);
+void _list_add(struct ListHead* _new,
+               struct ListHead* prev,
+               struct ListHead* next);
 
 #define list_entry(ptr, type, field) container_of(ptr, type, field)
 #define list_first_entry(ptr, type, field) list_entry((ptr)->next, type, field)
@@ -86,16 +86,16 @@ void _list_add(struct list_head* _new,
        &p->field != (h);                                    \
        p = n, n = list_entry(n->field.next, __typeof__(*n), field))
 
-void list_add(struct list_head* _new, struct list_head* head);
+void list_add(struct ListHead* _new, struct ListHead* head);
 
-void list_add_tail(struct list_head* _new, struct list_head* head);
+void list_add_tail(struct ListHead* _new, struct ListHead* head);
 
-void list_move_tail(struct list_head* entry, struct list_head* head);
+void list_move_tail(struct ListHead* entry, struct ListHead* head);
 
-void _list_splice(const struct list_head* list,
-                  struct list_head* prev,
-                  struct list_head* next);
+void _list_splice(const struct ListHead* list,
+                  struct ListHead* prev,
+                  struct ListHead* next);
 
-void list_splice(const struct list_head* list, struct list_head* head);
+void list_splice(const struct ListHead* list, struct ListHead* head);
 
-void list_splice_init(struct list_head* list, struct list_head* head);
+void list_splice_init(struct ListHead* list, struct ListHead* head);

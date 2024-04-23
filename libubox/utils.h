@@ -18,27 +18,27 @@
 
 #pragma once
 
-#include <cstdint>
-#include <ctime>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <cstdint>
+#include <ctime>
 
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
 
-#define constant_swap32(x)                                     \
+#define constant_swap32(x)                                       \
   ((uint32_t)((((uint32_t)(x) & (uint32_t)0x000000ffUL) << 24) | \
               (((uint32_t)(x) & (uint32_t)0x0000ff00UL) << 8) |  \
               (((uint32_t)(x) & (uint32_t)0x00ff0000UL) >> 8) |  \
               (((uint32_t)(x) & (uint32_t)0xff000000UL) >> 24)))
 
 #define eval_once(func, x) \
-  ({                         \
-    __typeof__(x) __x = x;   \
-    func(__x);               \
+  ({                       \
+    __typeof__(x) __x = x; \
+    func(__x);             \
   })
 
 #define cpu_to_be32(x) eval_once(constant_swap32, x)

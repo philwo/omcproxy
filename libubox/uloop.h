@@ -18,22 +18,22 @@
 
 #pragma once
 
-#include <csignal>
-#include <cstdint>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <csignal>
+#include <cstdint>
 
 #include "list.h"
 
-struct uloop_fd;
-struct uloop_timeout;
-struct uloop_process;
-struct uloop_signal;
+struct UloopFD;
+struct UloopTimeout;
+struct UloopProcess;
+struct UloopSignal;
 
-typedef void (*uloop_fd_handler)(struct uloop_fd* u, unsigned int events);
-typedef void (*uloop_timeout_handler)(struct uloop_timeout* t);
-typedef void (*uloop_process_handler)(struct uloop_process* c, int ret);
-typedef void (*uloop_signal_handler)(struct uloop_signal* s);
+typedef void (*uloop_fd_handler)(struct UloopFD* u, unsigned int events);
+typedef void (*uloop_timeout_handler)(struct UloopTimeout* t);
+typedef void (*uloop_process_handler)(struct UloopProcess* c, int ret);
+typedef void (*uloop_signal_handler)(struct UloopSignal* s);
 
 #define ULOOP_READ (1 << 0)
 #define ULOOP_WRITE (1 << 1)
@@ -47,7 +47,7 @@ typedef void (*uloop_signal_handler)(struct uloop_signal* s);
 
 #define ULOOP_ERROR_CB (1 << 6)
 
-struct uloop_fd {
+struct UloopFD {
   uloop_fd_handler cb;
   int fd;
   bool eof;
@@ -56,24 +56,24 @@ struct uloop_fd {
   uint8_t flags;
 };
 
-struct uloop_timeout {
-  struct list_head list;
+struct UloopTimeout {
+  struct ListHead list;
   bool pending;
 
   uloop_timeout_handler cb;
   struct timeval time;
 };
 
-struct uloop_process {
-  struct list_head list;
+struct UloopProcess {
+  struct ListHead list;
   bool pending;
 
   uloop_process_handler cb;
   pid_t pid;
 };
 
-struct uloop_signal {
-  struct list_head list;
+struct UloopSignal {
+  struct ListHead list;
 
   uloop_signal_handler cb;
   int signo;
@@ -83,16 +83,16 @@ extern bool uloop_cancelled;
 extern bool uloop_handle_sigchld;
 extern uloop_fd_handler uloop_fd_set_cb;
 
-int uloop_fd_add(struct uloop_fd* sock, unsigned int flags);
-int uloop_fd_delete(struct uloop_fd* sock);
+int uloop_fd_add(struct UloopFD* sock, unsigned int flags);
+int uloop_fd_delete(struct UloopFD* sock);
 
 int uloop_get_next_timeout();
-int uloop_timeout_add(struct uloop_timeout* timeout);
-int uloop_timeout_set(struct uloop_timeout* timeout, time_t msecs);
-int uloop_timeout_cancel(struct uloop_timeout* timeout);
-int64_t uloop_timeout_remaining64(struct uloop_timeout* timeout);
+int uloop_timeout_add(struct UloopTimeout* timeout);
+int uloop_timeout_set(struct UloopTimeout* timeout, time_t msecs);
+int uloop_timeout_cancel(struct UloopTimeout* timeout);
+int64_t uloop_timeout_remaining64(struct UloopTimeout* timeout);
 
-int uloop_process_delete(struct uloop_process* p);
+int uloop_process_delete(struct UloopProcess* p);
 
 void uloop_end();
 

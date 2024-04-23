@@ -44,37 +44,36 @@
 
 #include "list.h"
 
-/* Support for OLSR.org linker symbol export */
 #define EXPORT(sym) sym
 
 /**
  * This element is a member of a avl-tree. It must be contained in all
  * larger structs that should be put into a tree.
  */
-struct avl_node {
+struct AvlNode {
   /**
    * Linked list node for supporting easy iteration and multiple
    * elments with the same key.
    *
-   * this must be the first element of an avl_node to
+   * this must be the first element of an AvlNode to
    * make casting for lists easier
    */
-  struct list_head list;
+  struct ListHead list;
 
   /**
    * Pointer to parent node in tree, nullptr if root node
    */
-  struct avl_node* parent;
+  struct AvlNode* parent;
 
   /**
    * Pointer to left child
    */
-  struct avl_node* left;
+  struct AvlNode* left;
 
   /**
    * Pointer to right child
    */
-  struct avl_node* right;
+  struct AvlNode* right;
 
   /**
    * pointer to key of node
@@ -103,19 +102,19 @@ typedef int (*avl_tree_comp)(const void* k1, const void* k2, void* ptr);
 
 /**
  * This struct is the central management part of an avl tree.
- * One of them is necessary for each avl_tree.
+ * One of them is necessary for each AvlTree.
  */
-struct avl_tree {
+struct AvlTree {
   /**
    * Head of linked list node for supporting easy iteration
    * and multiple elments with the same key.
    */
-  struct list_head list_head;
+  struct ListHead list_head;
 
   /**
    * pointer to the root node of the avl tree, nullptr if tree is empty
    */
-  struct avl_node* root;
+  struct AvlNode* root;
 
   /**
    * number of nodes in the avl tree
@@ -145,20 +144,16 @@ struct avl_tree {
 /**
  * internal enum for avl_find_... macros
  */
-enum avl_find_mode {
-  AVL_FIND_EQUAL,
-  AVL_FIND_LESSEQUAL,
-  AVL_FIND_GREATEREQUAL
-};
+enum AvlFindMode { AVL_FIND_EQUAL, AVL_FIND_LESSEQUAL, AVL_FIND_GREATEREQUAL };
 
-void EXPORT(avl_init)(struct avl_tree*, avl_tree_comp, bool, void*);
-struct avl_node* EXPORT(avl_find)(const struct avl_tree*, const void*);
-struct avl_node* EXPORT(avl_find_greaterequal)(const struct avl_tree* tree,
-                                               const void* key);
-struct avl_node* EXPORT(avl_find_lessequal)(const struct avl_tree* tree,
-                                            const void* key);
-int EXPORT(avl_insert)(struct avl_tree*, struct avl_node*);
-void EXPORT(avl_delete)(struct avl_tree*, struct avl_node*);
+void EXPORT(avl_init)(struct AvlTree*, avl_tree_comp, bool, void*);
+struct AvlNode* EXPORT(avl_find)(const struct AvlTree*, const void*);
+struct AvlNode* EXPORT(avl_find_greaterequal)(const struct AvlTree* tree,
+                                              const void* key);
+struct AvlNode* EXPORT(avl_find_lessequal)(const struct AvlTree* tree,
+                                           const void* key);
+int EXPORT(avl_insert)(struct AvlTree*, struct AvlNode*);
+void EXPORT(avl_delete)(struct AvlTree*, struct AvlNode*);
 
 /**
  * Internal function to support returning the element from a avl tree query
@@ -168,17 +163,17 @@ void EXPORT(avl_delete)(struct avl_tree*, struct avl_node*);
  * @param mode mode of lookup operation (less equal, equal or greater equal)
  * @param pointer to elemen, nullptr if no fitting one was found
  */
-void* __avl_find_element(const struct avl_tree* tree,
+void* __avl_find_element(const struct AvlTree* tree,
                          const void* key,
                          size_t offset,
-                         enum avl_find_mode mode);
+                         enum AvlFindMode mode);
 
 /**
  * @param tree pointer to avl-tree
  * @param key pointer to key
  * @param element pointer to a node element
  *    (don't need to be initialized)
- * @param node_element name of the avl_node element inside the
+ * @param node_element name of the AvlNode element inside the
  *    larger struct
  * @return pointer to tree element with the specified key,
  *    nullptr if no element was found
@@ -193,9 +188,9 @@ void* __avl_find_element(const struct avl_tree* tree,
  * @param tree pointer to avl-tree
  * @param element pointer to a node element
  *    (don't need to be initialized)
- * @param node_member name of the avl_node element inside the
+ * @param node_member name of the AvlNode element inside the
  *    larger struct
- * @return pointer to the first element of the avl_tree
+ * @return pointer to the first element of the AvlTree
  *    (automatically converted to type 'element')
  */
 #define avl_first_element(tree, element, node_member) \
@@ -203,11 +198,11 @@ void* __avl_find_element(const struct avl_tree* tree,
 
 /**
  * @param tree pointer to tree
- * @param element pointer to a node struct that contains the avl_node
+ * @param element pointer to a node struct that contains the AvlNode
  *    (don't need to be initialized)
- * @param node_member name of the avl_node element inside the
+ * @param node_member name of the AvlNode element inside the
  *    larger struct
- * @return pointer to the last element of the avl_tree
+ * @return pointer to the last element of the AvlTree
  *    (automatically converted to type 'element')
  */
 #define avl_last_element(tree, element, node_member) \
@@ -218,7 +213,7 @@ void* __avl_find_element(const struct avl_tree* tree,
  * an avl tree
  *
  * @param element pointer to a node of the tree
- * @param node_member name of the avl_node element inside the
+ * @param node_member name of the AvlNode element inside the
  *    larger struct
  * @return pointer to the node after 'element'
  *    (automatically converted to type 'element')
@@ -236,7 +231,7 @@ void* __avl_find_element(const struct avl_tree* tree,
  * @param last pointer to last element of loop
  * @param element pointer to a node of the tree, this element will
  *    contain the current node of the list during the loop
- * @param node_member name of the avl_node element inside the
+ * @param node_member name of the AvlNode element inside the
  *    larger struct
  */
 #define avl_for_element_range(first, last, element, node_member)    \
@@ -245,14 +240,14 @@ void* __avl_find_element(const struct avl_tree* tree,
        element = avl_next_element(element, node_member))
 
 /**
- * Loop over all elements of an avl_tree, used similar to a for() command.
+ * Loop over all elements of an AvlTree, used similar to a for() command.
  * This loop should not be used if elements are removed from the tree during
  * the loop.
  *
  * @param tree pointer to avl-tree
  * @param element pointer to a node of the tree, this element will
  *    contain the current node of the tree during the loop
- * @param node_member name of the avl_node element inside the
+ * @param node_member name of the AvlNode element inside the
  *    larger struct
  */
 #define avl_for_each_element(tree, element, node_member)                       \
@@ -269,7 +264,7 @@ void* __avl_find_element(const struct avl_tree* tree,
  * @param first_element first element of loop
  * @param last_element last element of loop
  * @param element iterator pointer to tree element struct
- * @param node_member name of avl_node within tree element struct
+ * @param node_member name of AvlNode within tree element struct
  * @param ptr pointer to tree element struct which is used to store
  *    the next node during the loop
  */
@@ -281,7 +276,7 @@ void* __avl_find_element(const struct avl_tree* tree,
        element = ptr, ptr = avl_next_element(ptr, node_member))
 
 /**
- * Loop over all elements of an avl_tree, used similar to a for() command.
+ * Loop over all elements of an AvlTree, used similar to a for() command.
  * This loop can be used if the current element might be removed from
  * the tree during the loop. Other elements should not be removed during
  * the loop.
@@ -289,7 +284,7 @@ void* __avl_find_element(const struct avl_tree* tree,
  * @param tree pointer to avl-tree
  * @param element pointer to a node of the tree, this element will
  *    contain the current node of the tree during the loop
- * @param node_member name of the avl_node element inside the
+ * @param node_member name of the AvlNode element inside the
  *    larger struct
  * @param ptr pointer to a tree element which is used to store
  *    the next node during the loop

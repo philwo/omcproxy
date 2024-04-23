@@ -32,7 +32,7 @@ void client_unmap(struct in_addr* addr4, const struct in6_addr* addr6) {
 }
 
 // Add / update / remove a client entry for a multicast group
-int client_set(struct client* client,
+int client_set(struct Client* client,
                const struct in6_addr* group,
                bool include,
                const struct in6_addr sources[],
@@ -100,7 +100,7 @@ int client_set(struct client* client,
 }
 
 // Initialize client-instance
-int client_init(struct client* client, int ifindex) {
+int client_init(struct Client* client, int ifindex) {
   client->igmp_fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
   if (client->igmp_fd < 0) {
     return -errno;
@@ -116,7 +116,7 @@ int client_init(struct client* client, int ifindex) {
 }
 
 // Cleanup client-instance
-void client_deinit(struct client* client) {
+void client_deinit(struct Client* client) {
   if (client->ifindex) {
     close(client->igmp_fd);
     close(client->mld_fd);

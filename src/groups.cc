@@ -22,15 +22,15 @@
 
 #include "groups.h"
 
-bool group_is_included(const struct group* group, omcp_time_t time) {
+bool group_is_included(const struct Group* group, omcp_time_t time) {
   return group->exclude_until <= time;
 }
 
-bool source_is_included(const struct group_source* source, omcp_time_t time) {
+bool source_is_included(const struct GroupSource* source, omcp_time_t time) {
   return source->include_until > time;
 }
 
-// Group comparator for AVL-tree
+// group comparator for AVL-tree
 static int compare_groups(const void* k1,
                           const void* k2,
                           __attribute__((unused)) void* ptr) {
@@ -38,23 +38,23 @@ static int compare_groups(const void* k1,
 }
 
 // Remove a source-definition for a group
-static void querier_remove_source(struct group* group,
-                                  struct group_source* source) {
+static void querier_remove_source(struct Group* group,
+                                  struct GroupSource* source) {
   --group->source_count;
   list_del(&source->head);
   free(source);
 }
 
 // Clear all sources of a certain group
-static void querier_clear_sources(struct group* group) {
-  struct group_source *s, *n;
+static void querier_clear_sources(struct Group* group) {
+  struct GroupSource *s, *n;
   list_for_each_entry_safe(s, n, &group->sources, head)
       querier_remove_source(group, s);
 }
 
 // Remove a group and all associated sources from the group state
-static void querier_remove_group(struct groups* groups,
-                                 struct group* group,
+static void querier_remove_group(struct Groups* groups,
+                                 struct Group* group,
                                  omcp_time_t now) {
   querier_clear_sources(group);
   group->exclude_until = 0;
@@ -68,20 +68,20 @@ static void querier_remove_group(struct groups* groups,
 }
 
 // Expire a group and / or its associated sources depending on the current time
-static omcp_time_t expire_group(struct groups* groups,
-                                struct group* group,
+static omcp_time_t expire_group(struct Groups* groups,
+                                struct Group* group,
                                 omcp_time_t now,
                                 omcp_time_t next_event) {
-  struct groups_config* cfg =
+  struct GroupsConfig* cfg =
       IN6_IS_ADDR_V4MAPPED(&group->addr) ? &groups->cfg_v4 : &groups->cfg_v6;
   omcp_time_t llqi = now + cfg->last_listener_query_interval;
   omcp_time_t llqt = now + (cfg->last_listener_query_interval *
                             cfg->last_listener_query_count);
 
   // Handle group and source-specific query retransmission
-  struct list_head suppressed = LIST_HEAD_INIT(suppressed);
-  struct list_head unsuppressed = LIST_HEAD_INIT(unsuppressed);
-  struct group_source *s, *s2;
+  struct ListHead suppressed = LIST_HEAD_INIT(suppressed);
+  struct ListHead unsuppressed = LIST_HEAD_INIT(unsuppressed);
+  struct GroupSource *s, *s2;
 
   if (group->next_source_transmit > 0 && group->next_source_transmit <= now) {
     group->next_source_transmit = 0;
@@ -109,7 +109,8 @@ static omcp_time_t expire_group(struct groups* groups,
     group->next_generic_transmit = 0;
 
     if (groups->cb_query) {
-      groups->cb_query(groups, &group->addr, nullptr, group->exclude_until > llqt);
+      groups->cb_query(groups, &group->addr, nullptr,
+                       group->exclude_until > llqt);
     }
 
     --group->retransmit;
@@ -180,7 +181,7 @@ static omcp_time_t expire_group(struct groups* groups,
 }
 
 // Rearm the global groups-timer if the next event is before timer expiration
-static void rearm_timer(struct groups* groups, omcp_time_t msecs) {
+static void rearm_timer(struct Groups* groups, omcp_time_t msecs) {
   int64_t remain = uloop_timeout_remaining64(&groups->timer);
   if (remain < 0 || remain >= msecs) {
     uloop_timeout_set(&groups->timer, msecs);
@@ -188,12 +189,12 @@ static void rearm_timer(struct groups* groups, omcp_time_t msecs) {
 }
 
 // Expire all groups of a group-state (called by timer as callback)
-static void expire_groups(struct uloop_timeout* t) {
-  struct groups* groups = container_of(t, struct groups, timer);
+static void expire_groups(struct UloopTimeout* t) {
+  struct Groups* groups = container_of(t, struct Groups, timer);
   omcp_time_t now = omcp_time();
   omcp_time_t next_event = now + 3600 * OMCP_TIME_PER_SECOND;
 
-  struct group *group, *n;
+  struct Group *group, *n;
   avl_for_each_element_safe(&groups->groups, group, node, n) next_event =
       expire_group(groups, group, now, next_event);
 
@@ -201,7 +202,7 @@ static void expire_groups(struct uloop_timeout* t) {
 }
 
 // Initialize a group-state
-void groups_init(struct groups* groups) {
+void groups_init(struct Groups* groups) {
   avl_init(&groups->groups, compare_groups, false, nullptr);
   groups->timer.cb = expire_groups;
 
@@ -212,21 +213,21 @@ void groups_init(struct groups* groups) {
 }
 
 // Cleanup a group-state
-void groups_deinit(struct groups* groups) {
+void groups_deinit(struct Groups* groups) {
   omcp_time_t now = omcp_time();
-  struct group *group, *safe;
+  struct Group *group, *safe;
   avl_for_each_element_safe(&groups->groups, group, node, safe)
       querier_remove_group(groups, group, now);
   uloop_timeout_cancel(&groups->timer);
 }
 
 // Get group-object for a given group, create if requested
-static struct group* groups_get_group(struct groups* groups,
+static struct Group* groups_get_group(struct Groups* groups,
                                       const struct in6_addr* addr,
                                       bool* created) {
-  struct group* group = avl_find_element(&groups->groups, addr, group, node);
+  struct Group* group = avl_find_element(&groups->groups, addr, group, node);
   if (!group && created) {
-    group = new struct group();
+    group = new struct Group();
     group->addr = *addr;
     group->node.key = &group->addr;
     avl_insert(&groups->groups, &group->node);
@@ -240,16 +241,16 @@ static struct group* groups_get_group(struct groups* groups,
 }
 
 // Get source-object for a given source, create if requested
-static struct group_source* groups_get_source(struct groups* groups,
-                                              struct group* group,
+static struct GroupSource* groups_get_source(struct Groups* groups,
+                                              struct Group* group,
                                               const struct in6_addr* addr,
                                               bool* created) {
-  struct group_source *c, *source = nullptr;
+  struct GroupSource *c, *source = nullptr;
   group_for_each_source(c, group) if (IN6_ARE_ADDR_EQUAL(&c->addr, addr))
       source = c;
 
   if (!source && created && group->source_count < groups->source_limit) {
-    source = new struct group_source();
+    source = new struct GroupSource();
     source->addr = *addr;
     list_add_tail(&source->head, &group->sources);
     ++group->source_count;
@@ -262,12 +263,12 @@ static struct group_source* groups_get_source(struct groups* groups,
 }
 
 // Update the IGMP/MLD timers of a group-state
-void groups_update_config(struct groups* groups,
+void groups_update_config(struct Groups* groups,
                           bool v6,
                           omcp_time_t query_response_interval,
                           omcp_time_t query_interval,
                           int robustness) {
-  struct groups_config* cfg = v6 ? &groups->cfg_v6 : &groups->cfg_v4;
+  struct GroupsConfig* cfg = v6 ? &groups->cfg_v6 : &groups->cfg_v4;
   cfg->query_response_interval = query_response_interval;
   cfg->query_interval = query_interval;
   cfg->robustness = robustness;
@@ -277,20 +278,20 @@ void groups_update_config(struct groups* groups,
 
 // Update timers for a given group (called when receiving queries from other
 // queriers)
-void groups_update_timers(struct groups* groups,
+void groups_update_timers(struct Groups* groups,
                           const struct in6_addr* groupaddr,
                           const struct in6_addr* addrs,
                           size_t len) {
   char addrbuf[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, groupaddr, addrbuf, sizeof(addrbuf));
-  struct group* group = groups_get_group(groups, groupaddr, nullptr);
+  struct Group* group = groups_get_group(groups, groupaddr, nullptr);
   if (!group) {
     L_WARN("%s: failed to update timer: no such group %s", __FUNCTION__,
            addrbuf);
     return;
   }
 
-  struct groups_config* cfg =
+  struct GroupsConfig* cfg =
       IN6_IS_ADDR_V4MAPPED(&group->addr) ? &groups->cfg_v4 : &groups->cfg_v6;
   omcp_time_t now = omcp_time();
   omcp_time_t llqt = now + (cfg->last_listener_query_count *
@@ -302,7 +303,7 @@ void groups_update_timers(struct groups* groups,
     }
   } else {
     for (size_t i = 0; i < len; ++i) {
-      struct group_source* source =
+      struct GroupSource* source =
           groups_get_source(groups, group, &addrs[i], nullptr);
       if (!source) {
         L_WARN("%s: failed to update timer: unknown sources for group %s",
@@ -320,18 +321,18 @@ void groups_update_timers(struct groups* groups,
 }
 
 // Update state of a given group (on reception of node's IGMP/MLD packets)
-void groups_update_state(struct groups* groups,
+void groups_update_state(struct Groups* groups,
                          const struct in6_addr* groupaddr,
                          const struct in6_addr* addrs,
                          size_t len,
-                         enum groups_update update) {
+                         enum GroupsUpdate update) {
   bool created = false, changed = false;
   char addrbuf[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, groupaddr, addrbuf, sizeof(addrbuf));
   L_DEBUG("%s: %s (+%d sources) => %d", __FUNCTION__, addrbuf, (int)len,
           update);
 
-  struct group* group = groups_get_group(groups, groupaddr, &created);
+  struct Group* group = groups_get_group(groups, groupaddr, &created);
   if (!group) {
     L_ERR("querier_state: failed to allocate group for %s", addrbuf);
     return;
@@ -343,7 +344,7 @@ void groups_update_state(struct groups* groups,
 
   omcp_time_t now = omcp_time();
   omcp_time_t next_event = OMCP_TIME_MAX;
-  struct groups_config* cfg =
+  struct GroupsConfig* cfg =
       IN6_IS_ADDR_V4MAPPED(&group->addr) ? &groups->cfg_v4 : &groups->cfg_v6;
 
   // Backwards compatibility modes
@@ -387,11 +388,11 @@ void groups_update_state(struct groups* groups,
   omcp_time_t llqt = now + (cfg->last_listener_query_interval * llqc);
 
   // RFC 3810 7.4
-  struct list_head saved = LIST_HEAD_INIT(saved);
-  struct list_head queried = LIST_HEAD_INIT(queried);
+  struct ListHead saved = LIST_HEAD_INIT(saved);
+  struct ListHead queried = LIST_HEAD_INIT(queried);
   for (size_t i = 0; i < len; ++i) {
     bool* create = (include && update == UPDATE_BLOCK) ? nullptr : &created;
-    struct group_source* source =
+    struct GroupSource* source =
         groups_get_source(groups, group, &addrs[i], create);
 
     if (include && update == UPDATE_BLOCK) {
@@ -477,7 +478,7 @@ void groups_update_state(struct groups* groups,
 
   // Prepare queries
   if (update == UPDATE_TO_IN) {
-    struct group_source *source, *n;
+    struct GroupSource *source, *n;
     list_for_each_entry_safe(source, n, &group->sources, head) {
       if (source->include_until <= now) {
         continue;
@@ -493,7 +494,7 @@ void groups_update_state(struct groups* groups,
   }
 
   if (!list_empty(&queried)) {
-    struct group_source* source;
+    struct GroupSource* source;
     list_for_each_entry(source, &queried, head) {
       if (source->include_until > llqt) {
         source->include_until = llqt;
@@ -538,17 +539,17 @@ void groups_update_state(struct groups* groups,
 
 // Test if a group (and source) is requested in the current group state
 // (i.e. for deciding if it should be routed / forwarded)
-bool groups_includes_group(struct groups* groups,
+bool groups_includes_group(struct Groups* groups,
                            const struct in6_addr* addr,
                            const struct in6_addr* src,
                            omcp_time_t time) {
-  struct group* group = groups_get_group(groups, addr, nullptr);
+  struct Group* group = groups_get_group(groups, addr, nullptr);
   if (group) {
     if (!src && (!group_is_included(group, time) || group->source_count > 0)) {
       return true;
     }
 
-    struct group_source* source = groups_get_source(groups, group, src, nullptr);
+    struct GroupSource* source = groups_get_source(groups, group, src, nullptr);
     if ((!group_is_included(group, time) &&
          (!source || source_is_included(source, time))) ||
         (group_is_included(group, time) && source &&

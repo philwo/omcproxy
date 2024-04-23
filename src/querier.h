@@ -30,11 +30,11 @@
 #include "groups.h"
 #include "mrib.h"
 
-struct querier_iface {
-  struct list_head head;
-  struct list_head users;
-  struct uloop_timeout timeout;
-  struct groups_config cfg;
+struct QuerierIface {
+  struct ListHead head;
+  struct ListHead users;
+  struct UloopTimeout timeout;
+  struct GroupsConfig cfg;
 
   omcp_time_t igmp_next_query;
   bool igmp_other_querier;
@@ -44,48 +44,44 @@ struct querier_iface {
   bool mld_other_querier;
   int mld_startup_tries;
 
-  struct mrib_querier mrib;
-  struct groups groups;
+  struct MribQuerier mrib;
+  struct Groups groups;
   int ifindex;
 };
 
-struct querier;
-struct querier_user;
-struct querier_user_iface;
-
-typedef void(querier_iface_cb)(struct querier_user_iface* user,
+typedef void(QuerierIfaceCallback)(struct QuerierUserIface* user,
                                const struct in6_addr* group,
                                bool include,
                                const struct in6_addr* sources,
                                size_t len);
 
-struct querier_user {
-  struct list_head head;
-  struct groups* groups;
-  struct querier* querier;
+struct QuerierUser {
+  struct ListHead head;
+  struct Groups* groups;
+  struct Querier* querier;
 };
 
-struct querier_user_iface {
-  struct list_head head;
-  struct querier_user user;
-  struct querier_iface* iface;
-  querier_iface_cb* user_cb;
+struct QuerierUserIface {
+  struct ListHead head;
+  struct QuerierUser user;
+  struct QuerierIface* iface;
+  QuerierIfaceCallback* user_cb;
 };
 
 /* External API */
-int querier_init(struct querier* querier);
-void querier_deinit(struct querier* querier);
+int querier_init(struct Querier* querier);
+void querier_deinit(struct Querier* querier);
 
-int querier_attach(struct querier_user_iface* user,
-                   struct querier* querier,
+int querier_attach(struct QuerierUserIface* user,
+                   struct Querier* querier,
                    int ifindex,
-                   querier_iface_cb* cb);
-void querier_detach(struct querier_user_iface* user);
+                   QuerierIfaceCallback* cb);
+void querier_detach(struct QuerierUserIface* user);
 
 /* Internal API */
 
-struct querier {
-  struct list_head ifaces;
+struct Querier {
+  struct ListHead ifaces;
 };
 
 #define QUERIER_MAX_SOURCE 75
@@ -100,20 +96,22 @@ int querier_mrd(uint16_t mrc);
 uint8_t querier_qqic(int qi);
 uint16_t querier_mrc(int mrd);
 
-void igmp_handle(struct mrib_querier* mrib,
+void igmp_handle(struct MribQuerier* mrib,
                  const struct igmphdr* igmp,
                  size_t len,
                  const struct sockaddr_in* from);
-int igmp_send_query(struct querier_iface* q,
-                    const struct in6_addr* group,
-                    const struct list_head* sources,
+
+int igmp_send_query(struct QuerierIface* q,
+                    const struct in6_addr* Group,
+                    const struct ListHead* sources,
                     bool suppress);
 
-void mld_handle(struct mrib_querier* mrib,
+void mld_handle(struct MribQuerier* mrib,
                 const struct mld_hdr* hdr,
                 size_t len,
                 const struct sockaddr_in6* from);
-ssize_t mld_send_query(struct querier_iface* q,
+
+ssize_t mld_send_query(struct QuerierIface* q,
                        const struct in6_addr* group,
-                       const struct list_head* sources,
+                       const struct ListHead* sources,
                        bool suppress);
