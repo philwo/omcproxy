@@ -72,6 +72,7 @@ static void groups_remove_group(struct groups* groups,
 
   list_del(&group->head);
   free(group);
+  --groups->group_count;
 }
 
 // Expire a group and / or its associated sources depending on the current time
@@ -214,6 +215,9 @@ static void expire_groups(struct ev_timer* t) {
 void groups_init(struct groups* groups) {
   INIT_LIST_HEAD(&groups->groups);
   groups->timer.cb = expire_groups;
+  groups->group_count = 0;
+  groups->group_limit = SIZE_MAX;
+  groups->source_limit = SIZE_MAX;
 
   groups_update_config(groups, false, OMGP_TIME_PER_SECOND * 10,
                        125 * OMGP_TIME_PER_SECOND, 2);
@@ -246,11 +250,13 @@ static struct group* groups_get_group(struct groups* groups,
   }
 
   if (!group && created) {
-    group = calloc(1, sizeof(*group));
+    if (groups->group_count < groups->group_limit) {
+      group = calloc(1, sizeof(*group));
+    }
     if (group) {
       group->addr = *addr;
       list_add_tail(&group->head, &groups->groups);
-
+      ++groups->group_count;
       INIT_LIST_HEAD(&group->sources);
     }
     *created = group != NULL;

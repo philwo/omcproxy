@@ -69,6 +69,7 @@ struct groups {
   struct ev_timer timer;
   size_t source_limit;
   size_t group_limit;
+  size_t group_count;
   groups_query_cb* cb_query;
   groups_update_cb* cb_update;
 };

@@ -218,6 +218,28 @@ static void test_source_overflow_mid_update_falls_back_to_asm(void) {
   groups_deinit(&g);
 }
 
+static void test_group_limit_enforced(void) {
+  setup();
+  g.group_limit = 2;
+  struct in6_addr first = addr("ff05::1");
+  struct in6_addr second = addr("ff05::2");
+  struct in6_addr third = addr("ff05::3");
+
+  groups_update_state(&g, &first, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &second, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &third, NULL, 0, UPDATE_IS_EXCLUDE);
+  CHECK(groups_get(&g, &first) != NULL);
+  CHECK(groups_get(&g, &second) != NULL);
+  CHECK(groups_get(&g, &third) == NULL);
+
+  stub_advance(261 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&g, &first) == NULL);
+  groups_update_state(&g, &third, NULL, 0, UPDATE_IS_EXCLUDE);
+  CHECK(groups_get(&g, &third) != NULL);
+
+  groups_deinit(&g);
+}
+
 static void test_other_querier_timer_update(void) {
   setup();
   struct in6_addr grp = addr("ff05::77");
@@ -243,6 +265,7 @@ int main(void) {
   test_compat_mode_ignores_block();
   test_source_overflow_falls_back_to_asm();
   test_source_overflow_mid_update_falls_back_to_asm();
+  test_group_limit_enforced();
   test_other_querier_timer_update();
   return test_result();
 }
