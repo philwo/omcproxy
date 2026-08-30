@@ -2,8 +2,9 @@
 set -eu
 
 here=$(dirname "$(readlink -f "$0")")
-OMCPROXY=${OMCPROXY:-$here/../build/omcproxy}
-GROUP=ff3e::1234
+OMCPROXY=${OMCPROXY:-$here/../../build/omcproxy}
+ASMGROUP=ff0e::1234
+SSMGROUP=ff3e::1234
 
 if [ -z "${IN_NS:-}" ]; then
     exec unshare -r -n env IN_NS=1 OMCPROXY="$OMCPROXY" "$(readlink -f "$0")"
@@ -31,7 +32,7 @@ fail() {
 }
 
 has_upstream_join() {
-    ip -6 maddr show dev up0 | grep -q "$GROUP"
+    ip -6 maddr show dev up0 | grep -q "$1"
 }
 
 ip link add up0 type veth peer name up1
@@ -45,23 +46,23 @@ sleep 3
 proxy_pid=$!
 sleep 2
 
-python3 "$here/mcast_join.py" d1b "$GROUP" &
+python3 "$here/mcast_join.py" d1b "$ASMGROUP" &
 joiner_a=$!
-python3 "$here/mcast_join.py" d2b "$GROUP" &
+python3 "$here/mcast_join.py" d2b "$ASMGROUP" &
 joiner_b=$!
 sleep 4
 
-has_upstream_join || fail "no upstream join after both downstreams joined"
+has_upstream_join "$ASMGROUP" || fail "no upstream join after both downstreams joined"
 echo "ok: upstream join present with two downstream members"
 
 kill "$joiner_a"
 sleep 6
-has_upstream_join || fail "upstream join dropped after leave on d1 although d2 still has a member"
+has_upstream_join "$ASMGROUP" || fail "upstream join dropped after leave on d1 although d2 still has a member"
 echo "ok: upstream join survives leave on first downstream"
 
 kill "$joiner_b"
 sleep 6
-if has_upstream_join; then
+if has_upstream_join "$ASMGROUP"; then
     fail "upstream join still present after both downstreams left"
 fi
 echo "ok: upstream join removed after last downstream left"
@@ -77,9 +78,9 @@ upstream_includes() {
         END { exit !found }' /proc/net/mcfilter6
 }
 
-python3 "$here/mcast_join.py" d1b "$GROUP" "$S1" &
+python3 "$here/mcast_join.py" d1b "$SSMGROUP" "$S1" &
 joiner_a=$!
-python3 "$here/mcast_join.py" d2b "$GROUP" "$S2" &
+python3 "$here/mcast_join.py" d2b "$SSMGROUP" "$S2" &
 joiner_b=$!
 sleep 4
 
@@ -89,7 +90,7 @@ echo "ok: ssm upstream filter includes both sources"
 
 kill "$joiner_a"
 sleep 6
-has_upstream_join || fail "ssm: upstream join dropped after leave on d1 although d2 still has a member"
+has_upstream_join "$SSMGROUP" || fail "ssm: upstream join dropped after leave on d1 although d2 still has a member"
 upstream_includes "$S2HEX" || fail "ssm: upstream filter lost $S2 after unrelated leave on d1"
 echo "ok: ssm upstream join and $S2 survive leave on first downstream"
 if upstream_includes "$S1HEX"; then
@@ -99,9 +100,18 @@ echo "ok: ssm upstream filter dropped $S1 after leave on first downstream"
 
 kill "$joiner_b"
 sleep 6
-if has_upstream_join; then
+if has_upstream_join "$SSMGROUP"; then
     fail "ssm: upstream join still present after both downstreams left"
 fi
 echo "ok: ssm upstream join removed after last downstream left"
+
+python3 "$here/mcast_join.py" d1b "$SSMGROUP" &
+joiner_a=$!
+sleep 4
+if has_upstream_join "$SSMGROUP"; then
+    fail "ssm: source-less join of an SSM group created an upstream join"
+fi
+echo "ok: source-less join of an SSM group is ignored"
+kill "$joiner_a"
 
 echo "PASS"
