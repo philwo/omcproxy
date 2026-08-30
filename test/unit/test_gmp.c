@@ -387,6 +387,39 @@ static void test_mld_send_source_specific_query(void) {
   teardown();
 }
 
+static void test_float8_codec(void) {
+  CHECK(gmp_float8_decode(0) == 0);
+  CHECK(gmp_float8_decode(127) == 127);
+  CHECK(gmp_float8_decode(0x8f) == 248);
+  CHECK(gmp_float8_decode(0xff) == 31744);
+  CHECK(gmp_float8_encode(100) == 100);
+  CHECK(gmp_float8_encode(127) == 127);
+  CHECK(gmp_float8_encode(248) == 0x8f);
+  CHECK(gmp_float8_encode(31744) == 0xff);
+  CHECK(gmp_float8_encode(1000000) == 0xff);
+  for (int value = 1; value < 40000; value += 7) {
+    int round_trip = gmp_float8_decode(gmp_float8_encode(value));
+    CHECK(round_trip <= value || value > 31744);
+    CHECK(round_trip > value / 2);
+  }
+}
+
+static void test_float16_codec(void) {
+  CHECK(gmp_float16_decode(0) == 0);
+  CHECK(gmp_float16_decode(32767) == 32767);
+  CHECK(gmp_float16_decode(0x8fff) == 65528);
+  CHECK(gmp_float16_decode(0xffff) == 8387584);
+  CHECK(gmp_float16_encode(10000) == 10000);
+  CHECK(gmp_float16_encode(65528) == 0x8fff);
+  CHECK(gmp_float16_encode(8387584) == 0xffff);
+  CHECK(gmp_float16_encode(100000000) == 0xffff);
+  for (int value = 1; value < 9000000; value += 1009) {
+    int round_trip = gmp_float16_decode(gmp_float16_encode(value));
+    CHECK(round_trip <= value || value > 8387584);
+    CHECK(round_trip > value / 2);
+  }
+}
+
 static void test_checksum_even_length_self_verifies(void) {
   uint8_t data[12] = {0x11, 0x64};
   uint16_t csum = gmp_checksum(data, sizeof(data));
@@ -410,6 +443,8 @@ static void test_checksum_carry_folding(void) {
 
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
+  test_float8_codec();
+  test_float16_codec();
   test_checksum_even_length_self_verifies();
   test_checksum_odd_length_self_verifies();
   test_checksum_carry_folding();

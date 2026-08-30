@@ -83,9 +83,9 @@ static void querier_send_query(struct groups* groups,
           (!sources) ? "group" : "source", addrbuf, iface->ifindex, suppress);
 
   bool v4 = IN6_IS_ADDR_V4MAPPED(group);
-  if (v4 && !iface->igmp_other_querier) {
+  if (v4 && !iface->proto[GMP_IGMP].other_querier) {
     igmp_send_query(iface, group, sources, suppress);
-  } else if (!v4 && !iface->mld_other_querier) {
+  } else if (!v4 && !iface->proto[GMP_MLD].other_querier) {
     mld_send_query(iface, group, sources, suppress);
   }
 }
@@ -97,107 +97,40 @@ static void querier_iface_timer(struct ev_timer* timeout) {
   omgp_time_t now = omgp_time();
   omgp_time_t next_event = now + 3600 * OMGP_TIME_PER_SECOND;
 
-  if (iface->igmp_next_query <= now) {
-    // If the other querier is gone, reset interface config
-    if (iface->igmp_other_querier) {
-      iface->groups.cfg_v4 = iface->cfg;
-      iface->igmp_other_querier = false;
+  for (int family = GMP_IGMP; family <= GMP_MLD; ++family) {
+    struct querier_proto* protocol = &iface->proto[family];
+    struct groups_config* config =
+        (family == GMP_MLD) ? &iface->groups.cfg_v6 : &iface->groups.cfg_v4;
+
+    if (protocol->next_query <= now) {
+      if (protocol->other_querier) {
+        *config = iface->cfg;
+        protocol->other_querier = false;
+      }
+
+      if (family == GMP_MLD) {
+        mld_send_query(iface, NULL, NULL, false);
+      } else {
+        igmp_send_query(iface, NULL, NULL, false);
+      }
+      L_DEBUG("%s: sending generic %s-query on %d (S: 0)", __FUNCTION__,
+              (family == GMP_MLD) ? "MLD" : "IGMP", iface->ifindex);
+
+      if (protocol->startup_tries > 0) {
+        --protocol->startup_tries;
+      }
+
+      protocol->next_query =
+          now + ((protocol->startup_tries > 0) ? (config->query_interval / 4)
+                                               : config->query_interval);
     }
 
-    igmp_send_query(iface, NULL, NULL, false);
-    L_DEBUG("%s: sending generic IGMP-query on %d (S: 0)", __FUNCTION__,
-            iface->ifindex);
-
-    if (iface->igmp_startup_tries > 0) {
-      --iface->igmp_startup_tries;
+    if (protocol->next_query < next_event) {
+      next_event = protocol->next_query;
     }
-
-    iface->igmp_next_query =
-        now + ((iface->igmp_startup_tries > 0)
-                   ? (iface->groups.cfg_v4.query_interval / 4)
-                   : iface->groups.cfg_v4.query_interval);
-  }
-
-  if (iface->igmp_next_query < next_event) {
-    next_event = iface->igmp_next_query;
-  }
-
-  if (iface->mld_next_query <= now) {
-    // If the other querier is gone, reset interface config
-    if (iface->mld_other_querier) {
-      iface->groups.cfg_v6 = iface->cfg;
-      iface->mld_other_querier = false;
-    }
-
-    mld_send_query(iface, NULL, NULL, false);
-    L_DEBUG("%s: sending generic MLD-query on %d (S: 0)", __FUNCTION__,
-            iface->ifindex);
-
-    if (iface->mld_startup_tries > 0) {
-      --iface->mld_startup_tries;
-    }
-
-    iface->mld_next_query =
-        now + ((iface->mld_startup_tries > 0)
-                   ? (iface->groups.cfg_v6.query_interval / 4)
-                   : iface->groups.cfg_v6.query_interval);
-  }
-
-  if (iface->mld_next_query < next_event) {
-    next_event = iface->mld_next_query;
   }
 
   ev_timer_set(&iface->timeout, (next_event > now) ? next_event - now : 0);
-}
-
-// Calculate QQI from QQIC
-int querier_qqi(uint8_t qqic) {
-  return (qqic & 0x80) ? (((qqic & 0xf) | 0x10) << (((qqic >> 4) & 0x7) + 3))
-                       : qqic;
-}
-
-// Calculate MRD from MRC
-int querier_mrd(uint16_t mrc) {
-  mrc = ntohs(mrc);
-  return (mrc & 0x8000)
-             ? (((mrc & 0xfff) | 0x1000) << (((mrc >> 12) & 0x7) + 3))
-             : mrc;
-}
-
-// Calculate QQIC from QQI
-uint8_t querier_qqic(int qqi) {
-  if (qqi >= 128) {
-    int exp = 3;
-
-    while ((qqi >> exp) > 0x1f && exp <= 10) {
-      ++exp;
-    }
-
-    if (exp > 10) {
-      qqi = 0xff;
-    } else {
-      qqi = 0x80 | ((exp - 3) << 4) | ((qqi >> exp) & 0xf);
-    }
-  }
-  return (uint8_t)qqi;
-}
-
-// Calculate MRC from MRD
-uint16_t querier_mrc(int mrd) {
-  if (mrd >= 32768) {
-    int exp = 3;
-
-    while ((mrd >> exp) > 0x1fff && exp <= 10) {
-      ++exp;
-    }
-
-    if (exp > 10) {
-      mrd = 0xffff;
-    } else {
-      mrd = 0x8000 | ((exp - 3) << 12) | ((mrd >> exp) & 0xfff);
-    }
-  }
-  return htons((uint16_t)mrd);
 }
 
 // Attach an interface to a querier-instance
@@ -236,8 +169,8 @@ int querier_attach(struct querier_user_iface* user,
     iface->groups.cb_update = querier_announce_change;
     iface->groups.cb_query = querier_send_query;
     iface->cfg = iface->groups.cfg_v6;
-    iface->igmp_startup_tries = iface->groups.cfg_v4.robustness;
-    iface->mld_startup_tries = iface->groups.cfg_v6.robustness;
+    iface->proto[GMP_IGMP].startup_tries = iface->groups.cfg_v4.robustness;
+    iface->proto[GMP_MLD].startup_tries = iface->groups.cfg_v6.robustness;
 
     res = mrib_attach_querier(&iface->mrib, ifindex, igmp_handle, mld_handle);
     if (res) {

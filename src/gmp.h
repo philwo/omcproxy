@@ -20,4 +20,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+enum gmp_family {
+  GMP_IGMP = 0,
+  GMP_MLD = 1,
+};
+
 uint16_t gmp_checksum(const void* data, size_t len);
+
+int gmp_float8_decode(uint8_t value);
+uint8_t gmp_float8_encode(int value);
+int gmp_float16_decode(uint16_t value);
+uint16_t gmp_float16_encode(int value);

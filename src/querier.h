@@ -24,10 +24,17 @@
 
 #include <string.h>
 #include "ev.h"
+#include "gmp.h"
 #include "list.h"
 
 #include "groups.h"
 #include "mrib.h"
+
+struct querier_proto {
+  omgp_time_t next_query;
+  bool other_querier;
+  int startup_tries;
+};
 
 struct querier_iface {
   struct list_head head;
@@ -35,13 +42,7 @@ struct querier_iface {
   struct ev_timer timeout;
   struct groups_config cfg;
 
-  omgp_time_t igmp_next_query;
-  bool igmp_other_querier;
-  int igmp_startup_tries;
-
-  omgp_time_t mld_next_query;
-  bool mld_other_querier;
-  int mld_startup_tries;
+  struct querier_proto proto[2];
 
   struct mrib_querier mrib;
   struct groups groups;
@@ -101,11 +102,6 @@ static inline void querier_map(struct in6_addr* addr6, in_addr_t addr4) {
   addr6->s6_addr32[2] = htobe32(0xffff);
   addr6->s6_addr32[3] = addr4;
 }
-
-int querier_qqi(uint8_t qqic);
-int querier_mrd(uint16_t mrc);
-uint8_t querier_qqic(int qi);
-uint16_t querier_mrc(int mrd);
 
 void igmp_handle(struct mrib_querier* mrib,
                  const struct igmphdr* igmp,

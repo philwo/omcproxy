@@ -32,6 +32,7 @@
 #include <unistd.h>
 
 #include "addr.h"
+#include "gmp.h"
 #include "mrib.h"
 #include "querier.h"
 
@@ -120,8 +121,8 @@ void mld_handle(struct mrib_querier* mrib,
       mrd =
           (len == sizeof(struct mld_hdr))
               ? ntohs(query->mld.mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0])
-              : querier_mrd(
-                    query->mld.mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0]);
+              : gmp_float16_decode(ntohs(
+                    query->mld.mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0]));
     }
 
     if (len > sizeof(struct mld_hdr)) {
@@ -130,7 +131,7 @@ void mld_handle(struct mrib_querier* mrib,
       }
 
       if (query->qqic) {
-        query_interval = (omgp_time_t)querier_qqi(query->qqic) * 1000;
+        query_interval = (omgp_time_t)gmp_float8_decode(query->qqic) * 1000;
       }
 
       suppress = query->s_qrv & QUERIER_SUPPRESS;
@@ -153,8 +154,8 @@ void mld_handle(struct mrib_querier* mrib,
         len > sizeof(struct mld_hdr)) {
       groups_update_config(&q->groups, true, mrd, query_interval, robustness);
 
-      q->mld_other_querier = true;
-      q->mld_next_query =
+      q->proto[GMP_MLD].other_querier = true;
+      q->proto[GMP_MLD].next_query =
           now + (q->groups.cfg_v6.query_response_interval / 2) +
           (q->groups.cfg_v6.robustness * q->groups.cfg_v6.query_interval);
     }
@@ -197,22 +198,22 @@ ssize_t mld_send_query(struct querier_iface* q,
                        const struct in6_addr* group,
                        const struct list_head* sources,
                        bool suppress) {
-  uint16_t mrc =
-      querier_mrc((int)((group) ? q->groups.cfg_v6.last_listener_query_interval
-                                : q->groups.cfg_v6.query_response_interval));
+  uint16_t mrc = htons(gmp_float16_encode(
+      (int)((group) ? q->groups.cfg_v6.last_listener_query_interval
+                    : q->groups.cfg_v6.query_response_interval)));
   struct {
     struct mld_query q;
     struct in6_addr addrs[QUERIER_MAX_SOURCE];
-  } query = {
-      .q = {
-          .mld = {.mld_icmp6_hdr = {MLD_LISTENER_QUERY,
-                                    0,
-                                    0,
-                                    {.icmp6_un_data16 = {mrc, 0}}}},
-          .s_qrv = (uint8_t)((q->groups.cfg_v6.robustness & 0x7) |
-                             (suppress ? QUERIER_SUPPRESS : 0)),
-          .qqic = querier_qqic((int)(q->groups.cfg_v6.query_interval / 1000)),
-      }};
+  } query = {.q = {
+                 .mld = {.mld_icmp6_hdr = {MLD_LISTENER_QUERY,
+                                           0,
+                                           0,
+                                           {.icmp6_un_data16 = {mrc, 0}}}},
+                 .s_qrv = (uint8_t)((q->groups.cfg_v6.robustness & 0x7) |
+                                    (suppress ? QUERIER_SUPPRESS : 0)),
+                 .qqic = gmp_float8_encode(
+                     (int)(q->groups.cfg_v6.query_interval / 1000)),
+             }};
 
   struct group_source* s;
   size_t cnt = 0;

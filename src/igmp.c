@@ -26,6 +26,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "gmp.h"
 #include "querier.h"
 
 // Test if multicast-group is valid and relevant
@@ -111,8 +112,9 @@ void igmp_handle(struct mrib_querier* mrib,
     omgp_time_t query_interval = 125000;
 
     if (igmp->code) {
-      mrd = (omgp_time_t)100 *
-            ((len == sizeof(*igmp)) ? igmp->code : querier_qqi(igmp->code));
+      mrd =
+          (omgp_time_t)100 *
+          ((len == sizeof(*igmp)) ? igmp->code : gmp_float8_decode(igmp->code));
     }
 
     if ((size_t)len > sizeof(*igmp)) {
@@ -121,7 +123,7 @@ void igmp_handle(struct mrib_querier* mrib,
       }
 
       if (query->qqic) {
-        query_interval = (omgp_time_t)querier_qqi(query->qqic) * 1000;
+        query_interval = (omgp_time_t)gmp_float8_decode(query->qqic) * 1000;
       }
 
       suppress = query->suppress;
@@ -150,8 +152,8 @@ void igmp_handle(struct mrib_querier* mrib,
     if (election < 0 && !query->group && len > sizeof(*igmp)) {
       groups_update_config(&q->groups, false, mrd, query_interval, robustness);
 
-      q->igmp_other_querier = true;
-      q->igmp_next_query =
+      q->proto[GMP_IGMP].other_querier = true;
+      q->proto[GMP_IGMP].next_query =
           now + (q->groups.cfg_v4.query_response_interval / 2) +
           (q->groups.cfg_v4.robustness * q->groups.cfg_v4.query_interval);
     }
@@ -198,7 +200,7 @@ int igmp_send_query(struct querier_iface* q,
                     const struct in6_addr* group,
                     const struct list_head* sources,
                     bool suppress) {
-  uint8_t qqic = querier_qqic(
+  uint8_t qqic = gmp_float8_encode(
       (int)(((group) ? q->groups.cfg_v4.last_listener_query_interval
                      : q->groups.cfg_v4.query_response_interval) /
             100));
@@ -210,7 +212,8 @@ int igmp_send_query(struct querier_iface* q,
   query->code = qqic;
   query->qrv = (uint8_t)(q->groups.cfg_v4.robustness & 0x7);
   query->suppress = suppress;
-  query->qqic = querier_qqic((int)(q->groups.cfg_v4.query_interval / 1000));
+  query->qqic =
+      gmp_float8_encode((int)(q->groups.cfg_v4.query_interval / 1000));
 
   struct group_source* s;
   size_t cnt = 0;
