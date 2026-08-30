@@ -184,6 +184,40 @@ static void test_compat_mode_ignores_block(void) {
   groups_deinit(&g);
 }
 
+static void test_source_overflow_falls_back_to_asm(void) {
+  setup();
+  g.source_limit = 2;
+  struct in6_addr group = addr("ff05::abcd");
+  struct in6_addr sources[2] = {addr("2001:db8::1"), addr("2001:db8::2")};
+  struct in6_addr third = addr("2001:db8::3");
+  struct in6_addr unrelated = addr("2001:db8::ee");
+
+  groups_update_state(&g, &group, sources, 2, UPDATE_IS_INCLUDE);
+  CHECK(!groups_includes_group(&g, &group, &unrelated, stub_now));
+
+  groups_update_state(&g, &group, &third, 1, UPDATE_IS_INCLUDE);
+  CHECK(groups_includes_group(&g, &group, &unrelated, stub_now));
+  CHECK(groups_includes_group(&g, &group, &third, stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_source_overflow_mid_update_falls_back_to_asm(void) {
+  setup();
+  g.source_limit = 2;
+  struct in6_addr group = addr("ff05::dcba");
+  struct in6_addr sources[2] = {addr("2001:db8::1"), addr("2001:db8::2")};
+  struct in6_addr mixed[2] = {addr("2001:db8::1"), addr("2001:db8::3")};
+  struct in6_addr unrelated = addr("2001:db8::ee");
+
+  groups_update_state(&g, &group, sources, 2, UPDATE_IS_INCLUDE);
+  groups_update_state(&g, &group, mixed, 2, UPDATE_TO_EX);
+  CHECK(groups_includes_group(&g, &group, &unrelated, stub_now));
+  CHECK(update_source_count == 0);
+
+  groups_deinit(&g);
+}
+
 static void test_other_querier_timer_update(void) {
   setup();
   struct in6_addr grp = addr("ff05::77");
@@ -207,6 +241,8 @@ int main(void) {
   test_leave_triggers_group_queries();
   test_block_triggers_source_queries();
   test_compat_mode_ignores_block();
+  test_source_overflow_falls_back_to_asm();
+  test_source_overflow_mid_update_falls_back_to_asm();
   test_other_querier_timer_update();
   return test_result();
 }

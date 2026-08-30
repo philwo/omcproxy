@@ -428,7 +428,8 @@ void groups_update_state(struct groups* groups,
     } else {
       bool query = false;
       if (!source) {
-        groups_update_state(groups, groupaddr, NULL, 0, false);
+        list_splice(&queried, &group->sources);
+        groups_update_state(groups, groupaddr, NULL, 0, UPDATE_IS_EXCLUDE);
         L_WARN("%s: failed to allocate source for %s, fallback to ASM",
                __FUNCTION__, addrbuf);
         return;
