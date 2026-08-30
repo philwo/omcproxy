@@ -17,7 +17,6 @@
  *
  */
 
-#include <alloca.h>
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
@@ -38,25 +37,31 @@ int client_set(struct client* client,
   int family = (IN6_IS_ADDR_V4MAPPED(group)) ? AF_INET : AF_INET6;
   int sol = (family == AF_INET) ? SOL_IP : SOL_IPV6;
   char addrbuf[INET6_ADDRSTRLEN];
+
+  if (cnt > CLIENT_MAX_SOURCES) {
+    cnt = CLIENT_MAX_SOURCES;
+  }
   size_t len =
       sizeof(struct group_filter) + cnt * sizeof(struct sockaddr_storage);
-  struct {
+  union {
     struct group_filter f;
-    struct sockaddr_storage s[];
-  }* filter = alloca(len);
-  struct sockaddr_in* in_addr = (struct sockaddr_in*)&filter->f.gf_group;
-  struct sockaddr_in6* in6_addr = (struct sockaddr_in6*)&filter->f.gf_group;
+    uint8_t buf[sizeof(struct group_filter) +
+                CLIENT_MAX_SOURCES * sizeof(struct sockaddr_storage)];
+  } storage;
+  struct group_filter* filter = &storage.f;
+  struct sockaddr_in* in_addr = (struct sockaddr_in*)&filter->gf_group;
+  struct sockaddr_in6* in6_addr = (struct sockaddr_in6*)&filter->gf_group;
 
   inet_ntop(AF_INET6, group, addrbuf, sizeof(addrbuf));
   L_DEBUG("%s: %s on %d => %s (+%d sources)", __FUNCTION__, addrbuf,
           client->ifindex, (include) ? "include" : "exclude", (int)cnt);
 
   // Construct MSFILTER for outgoing IGMP / MLD
-  memset(filter, 0, len);
-  filter->f.gf_interface = (uint32_t)client->ifindex;
-  filter->f.gf_fmode = include ? MCAST_INCLUDE : MCAST_EXCLUDE;
-  filter->f.gf_group.ss_family = (sa_family_t)family;
-  filter->f.gf_numsrc = (uint32_t)cnt;
+  memset(&storage, 0, len);
+  filter->gf_interface = (uint32_t)client->ifindex;
+  filter->gf_fmode = include ? MCAST_INCLUDE : MCAST_EXCLUDE;
+  filter->gf_group.ss_family = (sa_family_t)family;
+  filter->gf_numsrc = (uint32_t)cnt;
 
   if (family == AF_INET) {
     client_unmap(&in_addr->sin_addr, group);
@@ -65,10 +70,10 @@ int client_set(struct client* client,
   }
 
   for (size_t i = 0; i < cnt; ++i) {
-    filter->f.gf_slist[i].ss_family = (sa_family_t)family;
+    filter->gf_slist[i].ss_family = (sa_family_t)family;
 
-    in_addr = (struct sockaddr_in*)&filter->f.gf_slist[i];
-    in6_addr = (struct sockaddr_in6*)&filter->f.gf_slist[i];
+    in_addr = (struct sockaddr_in*)&filter->gf_slist[i];
+    in6_addr = (struct sockaddr_in6*)&filter->gf_slist[i];
 
     if (family == AF_INET) {
       client_unmap(&in_addr->sin_addr, &sources[i]);

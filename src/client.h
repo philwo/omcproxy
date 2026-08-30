@@ -23,6 +23,8 @@
 #include <stdlib.h>
 #include "omcproxy.h"
 
+#define CLIENT_MAX_SOURCES 75
+
 struct client {
   int igmp_fd;
   int mld_fd;

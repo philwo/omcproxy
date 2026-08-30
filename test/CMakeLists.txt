@@ -35,6 +35,16 @@ target_include_directories(test_groups PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(test_groups PRIVATE omcproxy_build omcproxy_warnings)
 add_test(NAME groups COMMAND test_groups)
 
+add_executable(test_client
+  unit/test_client.c
+  unit/ev_stub.c
+  ${CMAKE_SOURCE_DIR}/src/client.c
+)
+target_include_directories(test_client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+target_link_libraries(test_client PRIVATE omcproxy_build omcproxy_warnings)
+target_link_options(test_client PRIVATE -Wl,--wrap=socket -Wl,--wrap=setsockopt -Wl,--wrap=close)
+add_test(NAME client COMMAND test_client)
+
 add_executable(test_gmp
   unit/test_gmp.c
   unit/ev_stub.c
