@@ -116,6 +116,27 @@ static size_t build_mld_report(uint8_t* buf,
   return 8 + 20 + 16 * nsrc;
 }
 
+static size_t build_mld_query(uint8_t* buf,
+                              const struct in6_addr* group,
+                              const struct in6_addr* sources,
+                              size_t source_count,
+                              bool suppress) {
+  memset(buf, 0, 28 + 16 * source_count);
+  buf[0] = 130;
+  buf[4] = 0;
+  buf[5] = 100;
+  if (group) {
+    memcpy(&buf[8], group, 16);
+  }
+  buf[24] = 2 | (suppress ? 0x8 : 0);
+  buf[26] = (uint8_t)(source_count >> 8);
+  buf[27] = (uint8_t)source_count;
+  for (size_t i = 0; i < source_count; ++i) {
+    memcpy(&buf[28 + 16 * i], &sources[i], 16);
+  }
+  return 28 + 16 * source_count;
+}
+
 static void igmp_input(size_t len) {
   struct sockaddr_in from = from4();
   igmp_handle(&q.mrib, (const struct igmphdr*)pkt, len, &from);
@@ -241,6 +262,29 @@ static void test_igmp_send_general_query(void) {
   teardown();
 }
 
+static void test_igmp_send_source_specific_query(void) {
+  setup();
+  struct in6_addr group;
+  querier_map(&group, addr4("232.9.9.9"));
+
+  struct group_source first = {.addr = {{{0}}}};
+  struct group_source second = {.addr = {{{0}}}};
+  querier_map(&first.addr, addr4("10.0.0.1"));
+  querier_map(&second.addr, addr4("10.0.0.2"));
+  struct list_head sources = LIST_HEAD_INIT(sources);
+  list_add_tail(&first.head, &sources);
+  list_add_tail(&second.head, &sources);
+
+  CHECK(igmp_send_query(&q, &group, &sources, false) == 0);
+  CHECK(stub_sent_family == 4);
+  CHECK(stub_sent_len == 12 + 2 * 4);
+  CHECK(stub_sent[10] == 0 && stub_sent[11] == 2);
+  CHECK(memcmp(&stub_sent[12], &first.addr.s6_addr32[3], 4) == 0);
+  CHECK(memcmp(&stub_sent[16], &second.addr.s6_addr32[3], 4) == 0);
+
+  teardown();
+}
+
 static void test_mld_report_exclude(void) {
   setup();
   struct in6_addr grp = addr("ff05::1234");
@@ -292,6 +336,33 @@ static void test_mld_v1_report_and_done(void) {
   mld_input(24);
   stub_advance(3 * OMGP_TIME_PER_SECOND);
   CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  teardown();
+}
+
+static void test_mld_query_updates_source_timers(void) {
+  setup();
+  struct in6_addr group = addr("ff35::8000:7");
+  struct in6_addr sources[1] = {addr("2001:db8::7")};
+
+  mld_input(build_mld_report(pkt, UPDATE_IS_INCLUDE, &group, sources, 1));
+  CHECK(groups_includes_group(&q.groups, &group, &sources[0], stub_now));
+
+  mld_input(build_mld_query(pkt, &group, sources, 1, false));
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&q.groups, &group) == NULL);
+
+  teardown();
+}
+
+static void test_mld_query_suppress_respected(void) {
+  setup();
+  struct in6_addr group = addr("ff05::8888");
+
+  mld_input(build_mld_report(pkt, UPDATE_IS_EXCLUDE, &group, NULL, 0));
+  mld_input(build_mld_query(pkt, &group, NULL, 0, true));
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&q.groups, &group) != NULL);
 
   teardown();
 }
@@ -349,10 +420,13 @@ int main(void) {
   test_igmp_query_updates_source_timers();
   test_igmp_query_suppress_respected();
   test_igmp_send_general_query();
+  test_igmp_send_source_specific_query();
   test_mld_report_exclude();
   test_mld_report_include_sources();
   test_mld_report_truncated();
   test_mld_v1_report_and_done();
+  test_mld_query_updates_source_timers();
+  test_mld_query_suppress_respected();
   test_mld_send_source_specific_query();
   return test_result();
 }

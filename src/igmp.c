@@ -222,7 +222,7 @@ int igmp_send_query(struct querier_iface* q,
         break;
       }
 
-      query->srcs[cnt] = querier_unmap(&s->addr);
+      query->srcs[cnt++] = querier_unmap(&s->addr);
     }
   }
   query->nsrcs = htons((uint16_t)cnt);

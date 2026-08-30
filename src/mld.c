@@ -132,6 +132,9 @@ void mld_handle(struct mrib_querier* mrib,
       if (query->qqic) {
         query_interval = (omgp_time_t)querier_qqi(query->qqic) * 1000;
       }
+
+      suppress = query->s_qrv & QUERIER_SUPPRESS;
+      nsrc = ntohs(query->nsrc);
     }
 
     if (!suppress && !IN6_IS_ADDR_UNSPECIFIED(&query->mld.mld_addr)) {

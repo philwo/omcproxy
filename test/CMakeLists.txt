@@ -102,7 +102,8 @@ if(OMCPROXY_FUZZ)
 endif()
 
 add_test(NAME netns_mld COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/leave_keeps_upstream_join_test.sh)
-set_tests_properties(netns_mld PROPERTIES
+add_test(NAME netns_igmp COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/igmp_leave_keeps_upstream_join_test.sh)
+set_tests_properties(netns_mld netns_igmp PROPERTIES
   LABELS netns
   ENVIRONMENT "OMCPROXY=$<TARGET_FILE:omcproxy>"
   TIMEOUT 180
