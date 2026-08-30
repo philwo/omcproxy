@@ -177,7 +177,7 @@ int proxy_set(int uplink,
     int ifindex = iface->iface->ifindex;
 
     size_t i;
-    for (i = 0; i < downlinks_cnt && downlinks[i] == ifindex; ++i) {
+    for (i = 0; i < downlinks_cnt && downlinks[i] != ifindex; ++i) {
     }
     if (i == downlinks_cnt) {
       proxy_remove_downlink(container_of(iface, struct proxy_downlink, iface));
