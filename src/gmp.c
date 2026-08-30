@@ -393,7 +393,7 @@ void mld_handle(struct mrib_querier* mrib,
   const char* addrstr = addr_ntop(addrbuf, sizeof(addrbuf), &from->sin6_addr);
   uint8_t type = hdr->mld_icmp6_hdr.icmp6_type;
 
-  if (type == ICMPV6_MGM_QUERY) {
+  if (type == MLD_LISTENER_QUERY) {
     const struct mld_query* query = (const struct mld_query*)hdr;
 
     if (len != sizeof(struct mld_hdr) &&
@@ -441,7 +441,7 @@ void mld_handle(struct mrib_querier* mrib,
 
     gmp_handle_query(q, GMP_MLD, &p,
                      memcmp(&from->sin6_addr, &local, sizeof(local)), addrstr);
-  } else if (type == ICMPV6_MLD2_REPORT) {
+  } else if (type == MLDV2_LISTENER_REPORT) {
     if (len <= sizeof(struct icmp6_hdr)) {
       return;
     }

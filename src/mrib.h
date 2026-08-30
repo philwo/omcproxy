@@ -26,16 +26,17 @@
 
 #include <netinet/icmp6.h>
 
-#define icmp6_filter icmpv6_filter
-#include <linux/icmpv6.h>
 #include <linux/igmp.h>
-#undef icmp6_filter
 
 #define MRIB_DEFAULT_LIFETIME 125
 
 #define IPV6_ALL_NODES_INIT                         \
   {                                                 \
     { { 0xff,0x02,0,0,0,0,0,0,0,0,0,0,0,0,0,0x1 } } \
+  }
+#define IPV6_ALL_MLDV2_ROUTERS_INIT                  \
+  {                                                  \
+    { { 0xff,0x02,0,0,0,0,0,0,0,0,0,0,0,0,0,0x16 } } \
   }
 #define INADDR_ALLIGMPV3RTRS_GROUP htobe32(0xe0000016U)
 
@@ -94,6 +95,8 @@ int mrib_attach_querier(struct mrib_querier* querier,
 // Deregister a querier from mrib
 void mrib_detach_querier(struct mrib_querier* querier);
 
+// Re-evaluate output interfaces for existing routes of a group after a
+// membership change
 void mrib_refresh(struct mrib_user* user, const struct in6_addr* group);
 
 // Add interface to filter

@@ -3,6 +3,7 @@
 
 #include <arpa/inet.h>
 #include <linux/mroute.h>
+#include <linux/mroute6.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 
@@ -18,6 +19,12 @@ static uint32_t programmed_oifs;
 static struct igmpmsg pending_msg;
 static bool message_pending;
 static int next_fd = 500;
+static int socket_calls;
+static int socket_fail_call;
+static int open_sockets;
+static int fail_optname;
+static int fail_level;
+static int del_vif_calls;
 
 int __wrap_socket(int domain, int type, int protocol);
 int __wrap_setsockopt(int fd,
@@ -32,6 +39,12 @@ int __wrap_socket(int domain, int type, int protocol) {
   (void)domain;
   (void)type;
   (void)protocol;
+  ++socket_calls;
+  if (socket_calls == socket_fail_call) {
+    errno = EMFILE;
+    return -1;
+  }
+  ++open_sockets;
   return next_fd++;
 }
 
@@ -41,6 +54,13 @@ int __wrap_setsockopt(int fd,
                       const void* optval,
                       socklen_t optlen) {
   (void)fd;
+  if (level == fail_level && optname == fail_optname) {
+    errno = EIO;
+    return -1;
+  }
+  if (level == IPPROTO_IP && optname == MRT_DEL_VIF) {
+    ++del_vif_calls;
+  }
   if (level == IPPROTO_IP && optname == MRT_ADD_MFC) {
     CHECK(optlen == sizeof(struct mfcctl));
     const struct mfcctl* control = optval;
@@ -56,6 +76,7 @@ int __wrap_setsockopt(int fd,
 
 int __wrap_close(int fd) {
   (void)fd;
+  --open_sockets;
   return 0;
 }
 
@@ -109,7 +130,38 @@ static void test_refresh_reconciles_output_interfaces(void) {
   mrib_detach_user(&uplink);
 }
 
+static void test_startup_failure_closes_partial_sockets(void) {
+  struct mrib_user user = {0};
+  socket_calls = 0;
+  socket_fail_call = 2;
+
+  CHECK(mrib_attach_user(&user, 100, NULL) == -EMFILE);
+  CHECK(user.iface == NULL);
+  CHECK(open_sockets == 0);
+  CHECK(stub_fd_count == 0);
+
+  socket_fail_call = 0;
+}
+
+static void test_interface_setup_rolls_back_ipv4(void) {
+  struct mrib_user user = {0};
+  fail_optname = MRT6_ADD_MIF;
+  fail_level = IPPROTO_IPV6;
+  del_vif_calls = 0;
+
+  CHECK(mrib_attach_user(&user, 102, NULL) == -EIO);
+  CHECK(user.iface == NULL);
+  CHECK(del_vif_calls == 1);
+
+  fail_optname = 0;
+  fail_level = 0;
+  CHECK(mrib_attach_user(&user, 102, NULL) == 0);
+  mrib_detach_user(&user);
+}
+
 int main(void) {
+  test_startup_failure_closes_partial_sockets();
+  test_interface_setup_rolls_back_ipv4();
   test_refresh_reconciles_output_interfaces();
   return test_result();
 }
