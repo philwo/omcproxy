@@ -242,6 +242,70 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
   }
 }
 
+// Test if an interface can be the parent of routes (i.e. is a proxy uplink)
+static bool mrib_iface_owns_routes(struct mrib_iface* iface) {
+  struct mrib_user* user;
+  list_for_each_entry (user, &iface->users, head) {
+    if (user->cb_newsource) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Handle a wrong-interface upcall: move the route to the notifying interface
+// if that one is a proxy uplink and the current parent is not
+static void mrib_wrong_parent(struct mrib_iface* arrival,
+                              const struct in6_addr* group,
+                              const struct in6_addr* source) {
+  char groupbuf[INET6_ADDRSTRLEN];
+  char sourcebuf[INET6_ADDRSTRLEN];
+  inet_ntop(AF_INET6, group, groupbuf, sizeof(groupbuf));
+  inet_ntop(AF_INET6, source, sourcebuf, sizeof(sourcebuf));
+
+  struct mrib_iface* owner = NULL;
+  struct mrib_route* route = NULL;
+  for (size_t i = 0; i < MAXMIFS && !route; ++i) {
+    if (mifs[i].ifindex == 0) {
+      continue;
+    }
+    struct mrib_route* c;
+    list_for_each_entry (c, &mifs[i].routes, head) {
+      if (IN6_ARE_ADDR_EQUAL(&c->group, group) &&
+          IN6_ARE_ADDR_EQUAL(&c->source, source)) {
+        owner = &mifs[i];
+        route = c;
+        break;
+      }
+    }
+  }
+
+  if (!route) {
+    L_DEBUG("%s: ignoring upcall for untracked %s from %s on %d", __FUNCTION__,
+            groupbuf, sourcebuf, arrival->ifindex);
+    return;
+  }
+
+  if (!mrib_iface_owns_routes(arrival) || mrib_iface_owns_routes(owner)) {
+    L_DEBUG("%s: keeping parent %d for %s from %s despite upcall on %d",
+            __FUNCTION__, owner->ifindex, groupbuf, sourcebuf,
+            arrival->ifindex);
+    return;
+  }
+
+  L_DEBUG("%s: moving parent of %s from %s to %d (was %d)", __FUNCTION__,
+          groupbuf, sourcebuf, arrival->ifindex, owner->ifindex);
+
+  list_del(&route->head);
+  route->valid_until =
+      omgp_time() + MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND;
+  if (list_empty(&arrival->routes)) {
+    ev_timer_set(&arrival->timer, MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND);
+  }
+  list_add_tail(&route->head, &arrival->routes);
+  mrib_program_route(arrival, group, source);
+}
+
 // Re-evaluate output interfaces of a group's routes after a membership change
 void mrib_refresh(struct mrib_user* user, const struct in6_addr* group) {
   struct mrib_iface* iface = user->iface;
@@ -310,7 +374,8 @@ static void mrib_receive_mrt(struct ev_fd* fd,
         continue;
       }
 
-      if (msg->im_msgtype != IGMPMSG_NOCACHE) {
+      if (msg->im_msgtype != IGMPMSG_NOCACHE &&
+          msg->im_msgtype != IGMPMSG_WRONGVIF) {
         L_WARN("Unknown MRT kernel-message %i on interface %d", msg->im_msgtype,
                iface->ifindex);
         continue;
@@ -323,7 +388,11 @@ static void mrib_receive_mrt(struct ev_fd* fd,
       src.s6_addr32[2] = htobe32(0xffff);
       src.s6_addr32[3] = msg->im_src.s_addr;
 
-      mrib_notify_newsource(iface, &dst, &src);
+      if (msg->im_msgtype == IGMPMSG_NOCACHE) {
+        mrib_notify_newsource(iface, &dst, &src);
+      } else {
+        mrib_wrong_parent(iface, &dst, &src);
+      }
     } else {
       // IGMP packet
       len -= (ssize_t)iph->ihl * 4;
@@ -425,13 +494,15 @@ static void mrib_receive_mrt6(struct ev_fd* fd,
         continue;
       }
 
-      if (msg->im6_msgtype != MRT6MSG_NOCACHE) {
+      if (msg->im6_msgtype == MRT6MSG_NOCACHE) {
+        mrib_notify_newsource(iface, &msg->im6_dst, &msg->im6_src);
+      } else if (msg->im6_msgtype == MRT6MSG_WRONGMIF) {
+        mrib_wrong_parent(iface, &msg->im6_dst, &msg->im6_src);
+      } else {
         L_WARN("Unknown MRT6 kernel-message %i on interface %d",
                msg->im6_msgtype, iface->ifindex);
         continue;
       }
-
-      mrib_notify_newsource(iface, &msg->im6_dst, &msg->im6_src);
     } else {
       int hlim = 0;
       if (from.sin6_scope_id > INT_MAX) {
@@ -552,6 +623,17 @@ static int mrib_init(void) {
     goto err;
   }
 
+  // Get wrong-interface upcalls to recover from spoofed MFC parents; without
+  // PIM mode the kernel only asserts when the arrival interface is an oif
+  if (setsockopt(fd4, IPPROTO_IP, MRT_ASSERT, &val, sizeof(val))) {
+    goto err;
+  }
+
+  if (setsockopt(fd4, IPPROTO_IP, MRT_PIM, &val, sizeof(val))) {
+    L_WARN("%s: cannot enable PIM mode, spoofed-parent recovery is limited",
+           __FUNCTION__);
+  }
+
   if (setsockopt(fd4, IPPROTO_IP, IP_PKTINFO, &val, sizeof(val))) {
     goto err;
   }
@@ -586,6 +668,17 @@ static int mrib_init(void) {
   val = 1;
   if (setsockopt(fd6, IPPROTO_IPV6, MRT6_INIT, &val, sizeof(val))) {
     goto err;
+  }
+
+  // Get wrong-interface upcalls to recover from spoofed MFC parents; without
+  // PIM mode the kernel only asserts when the arrival interface is an oif
+  if (setsockopt(fd6, IPPROTO_IPV6, MRT6_ASSERT, &val, sizeof(val))) {
+    goto err;
+  }
+
+  if (setsockopt(fd6, IPPROTO_IPV6, MRT6_PIM, &val, sizeof(val))) {
+    L_WARN("%s: cannot enable PIM mode, spoofed-parent recovery is limited",
+           __FUNCTION__);
   }
 
   if (setsockopt(fd6, IPPROTO_IPV6, IPV6_RECVHOPOPTS, &val, sizeof(val))) {

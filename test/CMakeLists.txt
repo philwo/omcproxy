@@ -67,6 +67,7 @@ target_link_libraries(test_mrib PRIVATE omcproxy_build omcproxy_warnings)
 target_link_options(test_mrib PRIVATE
   -Wl,--wrap=socket
   -Wl,--wrap=setsockopt
+  -Wl,--wrap=ioctl
   -Wl,--wrap=close
   -Wl,--wrap=recvmsg
 )
@@ -108,7 +109,8 @@ add_test(NAME netns_strict COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/strict_quer
 add_test(NAME netns_two_proxy COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/two_proxy_test.sh)
 add_test(NAME netns_membership_limit COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/membership_limit_test.sh)
 add_test(NAME netns_membership_limit6 COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/membership_limit6_test.sh)
-set_tests_properties(netns_mld netns_igmp netns_payload netns_strict netns_two_proxy netns_membership_limit netns_membership_limit6 PROPERTIES
+add_test(NAME netns_spoofed_parent COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/spoofed_parent_test.sh)
+set_tests_properties(netns_mld netns_igmp netns_payload netns_strict netns_two_proxy netns_membership_limit netns_membership_limit6 netns_spoofed_parent PROPERTIES
   LABELS netns
   ENVIRONMENT "OMCPROXY=$<TARGET_FILE:omcproxy>"
   TIMEOUT 180
