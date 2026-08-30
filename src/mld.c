@@ -91,7 +91,7 @@ void mld_handle(struct mrib_querier* mrib,
   if (hdr->mld_icmp6_hdr.icmp6_type == ICMPV6_MGM_QUERY) {
     struct mld_query* query = (struct mld_query*)hdr;
 
-    if (len != 24 &&
+    if (len != sizeof(struct mld_hdr) &&
         ((size_t)len < sizeof(*query) ||
          (size_t)len <
              sizeof(*query) + ntohs(query->nsrc) * sizeof(struct in6_addr))) {
@@ -117,13 +117,13 @@ void mld_handle(struct mrib_querier* mrib,
 
     if (query->mld.mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0]) {
       mrd =
-          (len == 24)
+          (len == sizeof(struct mld_hdr))
               ? ntohs(query->mld.mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0])
               : querier_mrd(
                     query->mld.mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0]);
     }
 
-    if (len > 24) {
+    if (len > sizeof(struct mld_hdr)) {
       if (query->s_qrv & 0x7) {
         robustness = query->s_qrv & 0x7;
       }
@@ -146,7 +146,7 @@ void mld_handle(struct mrib_querier* mrib,
     // switches
 
     if (election < 0 && IN6_IS_ADDR_UNSPECIFIED(&query->mld.mld_addr) &&
-        len > 24) {
+        len > sizeof(struct mld_hdr)) {
       groups_update_config(&q->groups, true, mrd, query_interval, robustness);
 
       q->mld_other_querier = true;
@@ -176,7 +176,7 @@ void mld_handle(struct mrib_querier* mrib,
     }
   } else if (hdr->mld_icmp6_hdr.icmp6_type == MLD_LISTENER_REPORT ||
              hdr->mld_icmp6_hdr.icmp6_type == MLD_LISTENER_REDUCTION) {
-    if (len != 24 || !mld_is_valid_group(&hdr->mld_addr)) {
+    if (len != sizeof(struct mld_hdr) || !mld_is_valid_group(&hdr->mld_addr)) {
       return;
     }
 

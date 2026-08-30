@@ -56,7 +56,6 @@ struct mrib_iface {
   struct ev_timer timer;
 };
 
-/* we can't use htobe32 outside a function */
 #if __BYTE_ORDER == __BIG_ENDIAN
 static uint32_t ipv4_rtr_alert = 0x94040000;
 #else
@@ -254,7 +253,8 @@ static uint16_t igmp_checksum(const uint16_t* buf, size_t len) {
 }
 
 // Receive and handle MRT event
-static void mrib_receive_mrt(struct ev_fd* fd, __unused uint32_t events) {
+static void mrib_receive_mrt(struct ev_fd* fd,
+                             [[maybe_unused]] uint32_t events) {
   uint8_t buf[9216];
   uint8_t cbuf[CMSG_SPACE(sizeof(struct in_pktinfo))];
   char addrbuf[INET_ADDRSTRLEN];
@@ -368,7 +368,8 @@ static void mrib_receive_mrt(struct ev_fd* fd, __unused uint32_t events) {
 }
 
 // Receive and handle MRT6 event
-static void mrib_receive_mrt6(struct ev_fd* fd, __unused uint32_t events) {
+static void mrib_receive_mrt6(struct ev_fd* fd,
+                              [[maybe_unused]] uint32_t events) {
   uint8_t buf[9216];
   uint8_t cbuf[128];
   char addrbuf[INET6_ADDRSTRLEN];
@@ -440,8 +441,8 @@ static void mrib_receive_mrt6(struct ev_fd* fd, __unused uint32_t events) {
       }
       inet_ntop(AF_INET6, &from.sin6_addr, addrbuf, sizeof(addrbuf));
 
-      if (!IN6_IS_ADDR_LINKLOCAL(&from.sin6_addr) || hlim != 1 || len < 24 ||
-          !alert) {
+      if (!IN6_IS_ADDR_LINKLOCAL(&from.sin6_addr) || hlim != 1 ||
+          len < (ssize_t)sizeof(struct mld_hdr) || !alert) {
         L_WARN("mld: ignoring invalid MLD-message of type %d from %s on %d",
                mld->mld_icmp6_hdr.icmp6_type, addrbuf, ifindex);
         continue;

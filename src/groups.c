@@ -23,25 +23,25 @@
 #include <string.h>
 
 // Remove a source-definition for a group
-static void querier_remove_source(struct group* group,
-                                  struct group_source* source) {
+static void groups_remove_source(struct group* group,
+                                 struct group_source* source) {
   --group->source_count;
   list_del(&source->head);
   free(source);
 }
 
 // Clear all sources of a certain group
-static void querier_clear_sources(struct group* group) {
+static void groups_clear_sources(struct group* group) {
   struct group_source* s;
   struct group_source* n;
   list_for_each_entry_safe (s, n, &group->sources, head) {
-    querier_remove_source(group, s);
+    groups_remove_source(group, s);
   }
 }
 
-static void querier_remove_unlisted_sources(struct group* group,
-                                            const struct in6_addr* addrs,
-                                            size_t len) {
+static void groups_remove_unlisted_sources(struct group* group,
+                                           const struct in6_addr* addrs,
+                                           size_t len) {
   struct group_source* source;
   struct group_source* next;
   list_for_each_entry_safe (source, next, &group->sources, head) {
@@ -53,16 +53,16 @@ static void querier_remove_unlisted_sources(struct group* group,
       }
     }
     if (!listed) {
-      querier_remove_source(group, source);
+      groups_remove_source(group, source);
     }
   }
 }
 
 // Remove a group and all associated sources from the group state
-static void querier_remove_group(struct groups* groups,
-                                 struct group* group,
-                                 omgp_time_t now) {
-  querier_clear_sources(group);
+static void groups_remove_group(struct groups* groups,
+                                struct group* group,
+                                omgp_time_t now) {
+  groups_clear_sources(group);
   group->exclude_until = 0;
 
   if (groups->cb_update) {
@@ -173,12 +173,12 @@ static omgp_time_t expire_group(struct groups* groups,
     }
 
     if (group->exclude_until == 0 && s->include_until == 0) {
-      querier_remove_source(group, s);
+      groups_remove_source(group, s);
     }
   }
 
   if (group->exclude_until == 0 && group->source_count == 0) {
-    querier_remove_group(groups, group, now);
+    groups_remove_group(groups, group, now);
   } else if (changed && groups->cb_update) {
     groups->cb_update(groups, group, now);
   }
@@ -226,7 +226,7 @@ void groups_deinit(struct groups* groups) {
   struct group* group;
   struct group* safe;
   list_for_each_entry_safe (group, safe, &groups->groups, head) {
-    querier_remove_group(groups, group, now);
+    groups_remove_group(groups, group, now);
   }
   ev_timer_cancel(&groups->timer);
 }
@@ -360,7 +360,7 @@ void groups_update_state(struct groups* groups,
 
   struct group* group = groups_get_group(groups, groupaddr, &created);
   if (!group) {
-    L_ERR("querier_state: failed to allocate group for %s", addrbuf);
+    L_ERR("%s: failed to allocate group for %s", __FUNCTION__, addrbuf);
     return;
   }
 
@@ -428,8 +428,8 @@ void groups_update_state(struct groups* groups,
       bool query = false;
       if (!source) {
         groups_update_state(groups, groupaddr, NULL, 0, false);
-        L_WARN("querier: failed to allocate source for %s, fallback to ASM",
-               addrbuf);
+        L_WARN("%s: failed to allocate source for %s, fallback to ASM",
+               __FUNCTION__, addrbuf);
         return;
       }
 
@@ -478,7 +478,7 @@ void groups_update_state(struct groups* groups,
       changed = true;
     }
 
-    querier_remove_unlisted_sources(group, addrs, len);
+    groups_remove_unlisted_sources(group, addrs, len);
     group->exclude_until = mali;
 
     if (next_event > mali) {
@@ -492,7 +492,7 @@ void groups_update_state(struct groups* groups,
       next_event = now;
     }
 
-    querier_remove_unlisted_sources(group, addrs, len);
+    groups_remove_unlisted_sources(group, addrs, len);
     group->exclude_until = now;
   }
 

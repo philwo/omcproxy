@@ -12,7 +12,7 @@ endif()
 
 option(OMCPROXY_WERROR "Treat compiler warnings as errors" OFF)
 option(OMCPROXY_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
-option(OMCPROXY_FUZZ "Build the libFuzzer target" OFF)
+option(OMCPROXY_FUZZ "Build the libFuzzer targets (requires clang)" OFF)
 
 add_library(omcproxy_build INTERFACE)
 target_compile_features(omcproxy_build INTERFACE c_std_23)
@@ -32,6 +32,7 @@ target_compile_options(omcproxy_warnings INTERFACE
 if(OMCPROXY_WERROR)
   target_compile_options(omcproxy_warnings INTERFACE -Werror)
 endif()
+
 
 add_library(omcproxy_core OBJECT
   src/client.c

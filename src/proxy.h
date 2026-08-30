@@ -33,11 +33,6 @@ enum proxy_flags {
   PROXY_ORGLOCAL = 8,
   PROXY_GLOBAL = 0xe,
 
-  // proxy may be flushed (from static config source)
-  PROXY_FLUSHABLE = 1 << 4,
-
-  // internal values
-  _PROXY_UNUSED = 1 << 5,
   PROXY_SCOPE_MASK = 0xf,
 };
 
@@ -46,5 +41,4 @@ int proxy_set(int uplink,
               size_t downlinks_cnt,
               enum proxy_flags flags);
 
-void proxy_update(bool all);
 void proxy_flush(void);

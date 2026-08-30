@@ -17,21 +17,7 @@
  *
  */
 
-#ifndef OMGPROXY_H_
-#define OMGPROXY_H_
-
-#ifdef __APPLE__
-
-#define __APPLE_USE_RFC_3542
-#define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
-#define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
-
-#include <sys/queue.h>
-#ifdef LIST_HEAD
-#undef LIST_HEAD
-#endif /* LIST_HEAD */
-
-#endif /* __APPLE__ */
+#pragma once
 
 #include <endian.h>
 #include <stddef.h>
@@ -40,21 +26,17 @@
 #include <syslog.h>
 #include <time.h>
 
-#define STR_EXPAND(tok) #tok
-#define STR(tok) STR_EXPAND(tok)
-
 typedef int64_t omgp_time_t;
 #define OMGP_TIME_MAX INT64_MAX
 #define OMGP_TIME_PER_SECOND INT64_C(1000)
 
 omgp_time_t omgp_time(void);
 
-// Logging macros
 #ifndef L_LEVEL
 #define L_LEVEL LOG_WARNING
-#endif /* !L_LEVEL */
+#endif
 
-#define L_INTERNAL(level, ...) syslog(level, __VA_ARGS__);
+#define L_INTERNAL(level, ...) syslog(level, __VA_ARGS__)
 
 #define L_ERR(...) L_INTERNAL(LOG_ERR, __VA_ARGS__)
 #define L_WARN(...) L_INTERNAL(LOG_WARNING, __VA_ARGS__)
@@ -62,18 +44,7 @@ omgp_time_t omgp_time(void);
 #define L_INFO(...) L_INTERNAL(LOG_INFO, __VA_ARGS__)
 #define L_DEBUG(...) L_INTERNAL(LOG_DEBUG, __VA_ARGS__)
 
-// Some C99 compatibility
-#ifndef typeof
-#define typeof __typeof
-#endif
-
 #ifndef container_of
 #define container_of(ptr, type, member) \
   ((type*)((char*)ptr - offsetof(type, member)))
 #endif
-
-#ifndef __unused
-#define __unused __attribute__((unused))
-#endif
-
-#endif /* PIMBD_H_ */

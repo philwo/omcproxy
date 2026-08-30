@@ -56,7 +56,8 @@ static int setup_proxy(char* spec) {
 
 static struct ev_fd signal_fd;
 
-static void handle_signalfd(struct ev_fd* efd, __unused uint32_t events) {
+static void handle_signalfd(struct ev_fd* efd,
+                            [[maybe_unused]] uint32_t events) {
   struct signalfd_siginfo info;
   while (read(efd->fd, &info, sizeof(info)) == sizeof(info)) {
   }
@@ -142,7 +143,6 @@ int main(int argc, char** argv) {
     ev_run();
   }
 
-  proxy_update(true);
   proxy_flush();
 
   ev_fd_del(&signal_fd);

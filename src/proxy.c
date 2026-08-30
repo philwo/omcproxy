@@ -16,7 +16,6 @@
  */
 
 #include <errno.h>
-
 #include "list.h"
 
 #include "client.h"
@@ -106,31 +105,21 @@ static void proxy_trigger(struct querier_user_iface* user,
   }
 }
 
-// Remove proxy with given name
-static int proxy_unset(struct proxy* proxyp) {
-  bool found = false;
-  struct proxy* proxy;
-  struct proxy* n;
-  list_for_each_entry_safe (proxy, n, &proxies, head) {
-    if ((proxyp && proxy == proxyp) ||
-        (!proxyp && (proxy->flags & _PROXY_UNUSED))) {
-      mrib_detach_user(&proxy->mrib);
+// Remove a proxy and all of its downlinks
+static void proxy_unset(struct proxy* proxy) {
+  mrib_detach_user(&proxy->mrib);
 
-      struct querier_user* user;
-      struct querier_user* un;
-      list_for_each_entry_safe (user, un, &proxy->querier.ifaces, head) {
-        struct querier_user_iface* i =
-            container_of(user, struct querier_user_iface, user);
-        proxy_remove_downlink(container_of(i, struct proxy_downlink, iface));
-      }
-
-      querier_deinit(&proxy->querier);
-      list_del(&proxy->head);
-      free(proxy);
-      found = true;
-    }
+  struct querier_user* user;
+  struct querier_user* n;
+  list_for_each_entry_safe (user, n, &proxy->querier.ifaces, head) {
+    struct querier_user_iface* iface =
+        container_of(user, struct querier_user_iface, user);
+    proxy_remove_downlink(container_of(iface, struct proxy_downlink, iface));
   }
-  return (found) ? 0 : -ENOENT;
+
+  querier_deinit(&proxy->querier);
+  list_del(&proxy->head);
+  free(proxy);
 }
 
 // Add / update proxy
@@ -249,17 +238,11 @@ err:
   return -errno;
 }
 
-// Mark all flushable proxies as unused
-void proxy_update(bool all) {
-  struct proxy* proxy;
-  list_for_each_entry (proxy, &proxies, head) {
-    if (all || (proxy->flags & PROXY_FLUSHABLE)) {
-      proxy->flags |= _PROXY_UNUSED;
-    }
-  }
-}
-
-// Flush all unused proxies
+// Remove all proxies
 void proxy_flush(void) {
-  proxy_unset(NULL);
+  struct proxy* proxy;
+  struct proxy* n;
+  list_for_each_entry_safe (proxy, n, &proxies, head) {
+    proxy_unset(proxy);
+  }
 }
