@@ -2,6 +2,7 @@
 #include <string.h>
 #include <syslog.h>
 
+#include "src/gmp.h"
 #include "src/querier.h"
 
 #include "ev_stub.h"
@@ -315,8 +316,32 @@ static void test_mld_send_source_specific_query(void) {
   teardown();
 }
 
+static void test_checksum_even_length_self_verifies(void) {
+  uint8_t data[12] = {0x11, 0x64};
+  uint16_t csum = gmp_checksum(data, sizeof(data));
+  memcpy(&data[2], &csum, 2);
+  CHECK(gmp_checksum(data, sizeof(data)) == 0);
+}
+
+static void test_checksum_odd_length_self_verifies(void) {
+  uint8_t data[5] = {0x11, 0x64, 0, 0, 0x7f};
+  uint16_t csum = gmp_checksum(data, sizeof(data));
+  memcpy(&data[2], &csum, 2);
+  CHECK(gmp_checksum(data, sizeof(data)) == 0);
+}
+
+static void test_checksum_carry_folding(void) {
+  uint8_t data[8] = {0xff, 0xff, 0xff, 0xff, 0, 0, 0xff, 0xff};
+  uint16_t csum = gmp_checksum(data, sizeof(data));
+  memcpy(&data[4], &csum, 2);
+  CHECK(gmp_checksum(data, sizeof(data)) == 0);
+}
+
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
+  test_checksum_even_length_self_verifies();
+  test_checksum_odd_length_self_verifies();
+  test_checksum_carry_folding();
   test_igmp_report_exclude();
   test_igmp_report_include_sources();
   test_igmp_report_truncated();

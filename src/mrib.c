@@ -38,6 +38,7 @@
 
 #include "ev.h"
 
+#include "gmp.h"
 #include "mrib.h"
 #include "omcproxy.h"
 
@@ -234,24 +235,6 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
   }
 }
 
-// Calculate IGMP-checksum
-static uint16_t igmp_checksum(const uint16_t* buf, size_t len) {
-  int32_t sum = 0;
-
-  while (len > 1) {
-    sum += *buf++;
-    sum = (sum + (sum >> 16)) & 0xffff;
-    len -= 2;
-  }
-
-  if (len == 1) {
-    sum += *((uint8_t*)buf);
-    sum += (sum + (sum >> 16)) & 0xffff;
-  }
-
-  return (uint16_t)~sum;
-}
-
 // Receive and handle MRT event
 static void mrib_receive_mrt(struct ev_fd* fd,
                              [[maybe_unused]] uint32_t events) {
@@ -339,7 +322,7 @@ static void mrib_receive_mrt(struct ev_fd* fd,
       igmp->csum = 0;
 
       if (iph->ttl != 1 || len < (ssize_t)sizeof(*igmp) ||
-          checksum != igmp_checksum((uint16_t*)igmp, (size_t)len)) {
+          checksum != gmp_checksum(igmp, (size_t)len)) {
         L_WARN("%s: ignoring invalid IGMP-message of type %x from %s on %d",
                __FUNCTION__, igmp->type, addrbuf, ifindex);
         continue;
@@ -476,7 +459,7 @@ int mrib_send_igmp(struct mrib_querier* q,
                        .msg_controllen = sizeof(cbuf)};
 
   igmp->csum = 0;
-  igmp->csum = igmp_checksum((uint16_t*)igmp, len);
+  igmp->csum = gmp_checksum(igmp, len);
 
   // Set control data (define destination interface)
   struct cmsghdr* chdr = CMSG_FIRSTHDR(&msg);

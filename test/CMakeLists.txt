@@ -40,6 +40,7 @@ add_executable(test_gmp
   unit/ev_stub.c
   unit/mrib_stub.c
   ${CMAKE_SOURCE_DIR}/src/addr.c
+  ${CMAKE_SOURCE_DIR}/src/gmp.c
   ${CMAKE_SOURCE_DIR}/src/groups.c
   ${CMAKE_SOURCE_DIR}/src/igmp.c
   ${CMAKE_SOURCE_DIR}/src/mld.c
