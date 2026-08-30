@@ -458,6 +458,111 @@ static void test_mld_send_source_specific_query(void) {
   teardown();
 }
 
+static void test_igmp_specific_query_wins_election(void) {
+  setup();
+  struct in6_addr grp;
+  addr_map(&grp, addr4("239.30.30.30"));
+  igmp_input(build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.30.30.30"),
+                               NULL, 0));
+
+  size_t len = build_igmp_query(pkt, addr4("239.30.30.30"), NULL, 0, false);
+  pkt[1] = 50;
+  pkt[8] = 7;
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(q.proto[GMP_IGMP].other_querier);
+  CHECK(q.groups.cfg_v4.robustness == 7);
+  CHECK(q.groups.cfg_v4.query_response_interval == 10000);
+
+  teardown();
+}
+
+static void test_mld_specific_query_wins_election(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::3030");
+  mld_input(build_mld_report(pkt, UPDATE_IS_EXCLUDE, &grp, NULL, 0));
+
+  size_t len = build_mld_query(pkt, &grp, NULL, 0, false);
+  pkt[24] = 7;
+  mld_input_from(len, "fe80::");
+  CHECK(q.proto[GMP_MLD].other_querier);
+  CHECK(q.groups.cfg_v6.robustness == 7);
+  CHECK(q.groups.cfg_v6.query_response_interval == 10000);
+
+  teardown();
+}
+
+static void test_igmp_qrv_adopted_while_querier(void) {
+  setup();
+  size_t len = build_igmp_query(pkt, 0, NULL, 0, false);
+  pkt[8] = 7;
+  pkt[9] = 30;
+  igmp_input(len);
+  CHECK(!q.proto[GMP_IGMP].other_querier);
+  CHECK(q.groups.cfg_v4.robustness == 7);
+  CHECK(q.groups.cfg_v4.query_interval == 125 * OMGP_TIME_PER_SECOND);
+  CHECK(q.groups.cfg_v4.query_response_interval == 10 * OMGP_TIME_PER_SECOND);
+
+  teardown();
+}
+
+static void test_mld_qrv_adopted_while_querier(void) {
+  setup();
+  size_t len = build_mld_query(pkt, NULL, NULL, 0, false);
+  pkt[24] = 7;
+  pkt[25] = 30;
+  mld_input(len);
+  CHECK(!q.proto[GMP_MLD].other_querier);
+  CHECK(q.groups.cfg_v6.robustness == 7);
+  CHECK(q.groups.cfg_v6.query_interval == 125 * OMGP_TIME_PER_SECOND);
+  CHECK(q.groups.cfg_v6.query_response_interval == 10 * OMGP_TIME_PER_SECOND);
+
+  teardown();
+}
+
+static void test_igmp_nonquerier_adopts_latest_query_config(void) {
+  setup();
+  size_t len = build_igmp_query(pkt, 0, NULL, 0, false);
+  pkt[8] = 7;
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(q.proto[GMP_IGMP].other_querier);
+  CHECK(q.groups.cfg_v4.robustness == 7);
+  CHECK(q.groups.cfg_v4.query_interval == 125 * OMGP_TIME_PER_SECOND);
+  omgp_time_t oqpt = q.proto[GMP_IGMP].next_query;
+
+  len = build_igmp_query(pkt, 0, NULL, 0, false);
+  pkt[8] = 3;
+  pkt[9] = 30;
+  igmp_input_from(len, "192.168.1.3");
+  CHECK(q.proto[GMP_IGMP].other_querier);
+  CHECK(q.groups.cfg_v4.robustness == 3);
+  CHECK(q.groups.cfg_v4.query_interval == 30 * OMGP_TIME_PER_SECOND);
+  CHECK(q.proto[GMP_IGMP].next_query == oqpt);
+
+  teardown();
+}
+
+static void test_mld_nonquerier_adopts_latest_query_config(void) {
+  setup();
+  size_t len = build_mld_query(pkt, NULL, NULL, 0, false);
+  pkt[24] = 7;
+  mld_input_from(len, "fe80::");
+  CHECK(q.proto[GMP_MLD].other_querier);
+  CHECK(q.groups.cfg_v6.robustness == 7);
+  CHECK(q.groups.cfg_v6.query_interval == 125 * OMGP_TIME_PER_SECOND);
+  omgp_time_t oqpt = q.proto[GMP_MLD].next_query;
+
+  len = build_mld_query(pkt, NULL, NULL, 0, false);
+  pkt[24] = 3;
+  pkt[25] = 30;
+  mld_input_from(len, "fe80::3");
+  CHECK(q.proto[GMP_MLD].other_querier);
+  CHECK(q.groups.cfg_v6.robustness == 3);
+  CHECK(q.groups.cfg_v6.query_interval == 30 * OMGP_TIME_PER_SECOND);
+  CHECK(q.proto[GMP_MLD].next_query == oqpt);
+
+  teardown();
+}
+
 static void test_igmp_general_query_mrc_zero(void) {
   setup();
   size_t len = build_igmp_query(pkt, 0, NULL, 0, false);
@@ -677,6 +782,12 @@ int main(void) {
   test_mld_query_updates_source_timers();
   test_mld_query_suppress_respected();
   test_mld_send_source_specific_query();
+  test_igmp_specific_query_wins_election();
+  test_mld_specific_query_wins_election();
+  test_igmp_qrv_adopted_while_querier();
+  test_mld_qrv_adopted_while_querier();
+  test_igmp_nonquerier_adopts_latest_query_config();
+  test_mld_nonquerier_adopts_latest_query_config();
   test_igmp_general_query_mrc_zero();
   test_mld_general_query_mrc_zero();
   test_igmp_zero_group_with_sources_ignored();

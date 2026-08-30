@@ -262,7 +262,8 @@ static void gmp_handle_report(struct groups* groups,
   }
 }
 
-// Handle a normalized query: update timers, run the querier election
+// Handle a normalized query: run the querier election and update timers.
+// Legacy short queries are deliberately excluded from the election.
 static void gmp_handle_query(struct querier_iface* q,
                              enum gmp_family family,
                              const struct gmp_query* p,
@@ -274,20 +275,28 @@ static void gmp_handle_query(struct querier_iface* q,
     groups_update_timers(&q->groups, &p->group, p->sources, p->nsrc);
   }
 
-  L_INFO("%s: detected other querier %s with priority %d on %d", __FUNCTION__,
-         fromstr, election, q->ifindex);
-
-  // TODO: v1/v2-only queriers are ignored, many of them are dumb switches
-
-  if (election < 0 && p->general && p->full_length) {
-    groups_update_config(&q->groups, family == GMP_MLD, p->mrd,
-                         p->query_interval, p->robustness);
-
+  if (election != 0 && p->full_length) {
     struct groups_config* cfg =
         (family == GMP_MLD) ? &q->groups.cfg_v6 : &q->groups.cfg_v4;
-    q->proto[family].other_querier = true;
-    q->proto[family].next_query = now + (cfg->query_response_interval / 2) +
-                                  (cfg->robustness * cfg->query_interval);
+    bool was_other = q->proto[family].other_querier;
+    if (election < 0) {
+      q->proto[family].other_querier = true;
+    }
+    bool other = q->proto[family].other_querier;
+
+    omgp_time_t qri =
+        (other && p->general) ? p->mrd : cfg->query_response_interval;
+    omgp_time_t qi = other ? p->query_interval : cfg->query_interval;
+    groups_update_config(&q->groups, family == GMP_MLD, qri, qi, p->robustness);
+
+    if (election < 0) {
+      q->proto[family].next_query = now + (cfg->query_response_interval / 2) +
+                                    (cfg->robustness * cfg->query_interval);
+      if (!was_other) {
+        L_INFO("%s: detected other querier %s on %d", __FUNCTION__, fromstr,
+               q->ifindex);
+      }
+    }
   }
 }
 
