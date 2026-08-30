@@ -104,12 +104,6 @@ static inline void querier_map(struct in6_addr* addr6, in_addr_t addr4) {
   addr6->s6_addr32[3] = addr4;
 }
 
-void querier_announce(struct querier_user* user,
-                      omgp_time_t now,
-                      const struct group* group,
-                      bool enabled);
-void querier_synthesize_events(struct querier* querier);
-
 int querier_qqi(uint8_t qqic);
 int querier_mrd(uint16_t mrc);
 uint8_t querier_qqic(int qi);

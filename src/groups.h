@@ -78,7 +78,7 @@ void groups_init(struct groups* groups);
 void groups_deinit(struct groups* groups);
 
 enum groups_update {
-  UPDATE_UNSPEC,
+  UPDATE_UNSPEC = 0,
   UPDATE_IS_INCLUDE = 1,
   UPDATE_IS_EXCLUDE = 2,
   UPDATE_TO_IN = 3,
@@ -109,8 +109,6 @@ void groups_update_state(struct groups* groups,
                          size_t len,
                          enum groups_update update);
 
-void groups_synthesize_events(struct groups* groups);
-
 // Groups user query API
 
 static inline bool group_is_included(const struct group* group,
@@ -130,8 +128,9 @@ static inline bool source_is_included(const struct group_source* source,
   list_for_each_entry (source, &(group)->sources, head)
 
 #define group_for_each_active_source(source, group, time) \
-  list_for_each_entry (source, &group->sources, head)     \
-    if (source_is_included(source, time) == group_is_included(group, time))
+  list_for_each_entry (source, &(group)->sources, head)   \
+    if (source_is_included(source, (time)) ==             \
+        group_is_included((group), (time)))
 
 const struct group* groups_get(struct groups* groups,
                                const struct in6_addr* addr);

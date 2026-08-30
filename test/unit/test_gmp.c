@@ -127,7 +127,8 @@ static void mld_input(size_t len) {
 
 static void test_igmp_report_exclude(void) {
   setup();
-  struct in6_addr grp, any;
+  struct in6_addr grp;
+  struct in6_addr any;
   querier_map(&grp, addr4("239.1.2.3"));
   querier_map(&any, addr4("10.0.0.1"));
 
@@ -140,7 +141,10 @@ static void test_igmp_report_exclude(void) {
 
 static void test_igmp_report_include_sources(void) {
   setup();
-  struct in6_addr grp, s1, s2, s3;
+  struct in6_addr grp;
+  struct in6_addr s1;
+  struct in6_addr s2;
+  struct in6_addr s3;
   querier_map(&grp, addr4("232.1.1.1"));
   querier_map(&s1, addr4("10.0.0.1"));
   querier_map(&s2, addr4("10.0.0.2"));
@@ -195,7 +199,8 @@ static void test_igmp_v2_report_and_leave(void) {
 
 static void test_igmp_query_updates_source_timers(void) {
   setup();
-  struct in6_addr grp, s1;
+  struct in6_addr grp;
+  struct in6_addr s1;
   querier_map(&grp, addr4("232.7.7.7"));
   querier_map(&s1, addr4("10.0.0.7"));
 

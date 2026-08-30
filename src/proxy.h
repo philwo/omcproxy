@@ -22,6 +22,8 @@
 #include <stdint.h>
 
 enum proxy_flags {
+  PROXY_SCOPE_UNSPEC = 0,
+
   // minimum scope to proxy (use only one, includes higher scopes)
   PROXY_REALMLOCAL = 3,
   PROXY_ADMINLOCAL = 4,
@@ -34,7 +36,7 @@ enum proxy_flags {
 
   // internal values
   _PROXY_UNUSED = 1 << 5,
-  _PROXY_SCOPEMASK = 0xf,
+  PROXY_SCOPE_MASK = 0xf,
 };
 
 int proxy_set(int uplink,

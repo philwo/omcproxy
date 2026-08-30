@@ -75,7 +75,7 @@ static ssize_t mld_handle_record(struct groups* groups,
                         r->type);
   }
 
-  return read;
+  return (ssize_t)read;
 }
 
 // Receive an MLD-Packet from a node (called by uloop as callback)
@@ -129,7 +129,7 @@ void mld_handle(struct mrib_querier* mrib,
       }
 
       if (query->qqic) {
-        query_interval = querier_qqi(query->qqic) * 1000;
+        query_interval = (omgp_time_t)querier_qqi(query->qqic) * 1000;
       }
     }
 
@@ -193,20 +193,21 @@ ssize_t mld_send_query(struct querier_iface* q,
                        const struct list_head* sources,
                        bool suppress) {
   uint16_t mrc =
-      querier_mrc((group) ? q->groups.cfg_v6.last_listener_query_interval
-                          : q->groups.cfg_v6.query_response_interval);
+      querier_mrc((int)((group) ? q->groups.cfg_v6.last_listener_query_interval
+                                : q->groups.cfg_v6.query_response_interval));
   struct {
     struct mld_query q;
     struct in6_addr addrs[QUERIER_MAX_SOURCE];
-  } query = {.q = {
-                 .mld = {.mld_icmp6_hdr = {MLD_LISTENER_QUERY,
-                                           0,
-                                           0,
-                                           {.icmp6_un_data16 = {mrc, 0}}}},
-                 .s_qrv = (q->groups.cfg_v6.robustness & 0x7) |
-                          (suppress ? QUERIER_SUPPRESS : 0),
-                 .qqic = querier_qqic(q->groups.cfg_v6.query_interval / 1000),
-             }};
+  } query = {
+      .q = {
+          .mld = {.mld_icmp6_hdr = {MLD_LISTENER_QUERY,
+                                    0,
+                                    0,
+                                    {.icmp6_un_data16 = {mrc, 0}}}},
+          .s_qrv = (q->groups.cfg_v6.robustness & 0x7) |
+                   (suppress ? QUERIER_SUPPRESS : 0),
+          .qqic = querier_qqic((int)(q->groups.cfg_v6.query_interval / 1000)),
+      }};
 
   struct group_source* s;
   size_t cnt = 0;

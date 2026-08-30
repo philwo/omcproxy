@@ -1,7 +1,24 @@
 ---
 Checks: >-
   -*,
-  readability-braces-around-statements
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  bugprone-*,
+  cert-*,
+  misc-misleading-bidirectional,
+  misc-misleading-identifier,
+  misc-non-copyable-objects,
+  misc-redundant-expression,
+  readability-braces-around-statements,
+  readability-isolate-declaration,
+  -clang-analyzer-optin.performance.Padding,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-macro-parentheses,
+  -bugprone-reserved-identifier,
+  -cert-dcl37-c,
+  -cert-dcl51-cpp,
+  -cert-err33-c
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*/(src|test)/.*'
 SystemHeaders: false

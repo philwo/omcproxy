@@ -17,6 +17,7 @@
 
 #include <errno.h>
 #include <libubox/list.h>
+#include <string.h>
 
 #include "client.h"
 #include "mrib.h"
@@ -66,7 +67,7 @@ static bool proxy_match_scope(enum proxy_flags flags,
   } else {
     scope = addr->s6_addr[1] & 0xf;
   }
-  return scope >= (flags & _PROXY_SCOPEMASK);
+  return scope >= (flags & PROXY_SCOPE_MASK);
 }
 
 // Test and set multicast route (called by mrib on detection of new source)
@@ -108,13 +109,15 @@ static void proxy_trigger(struct querier_user_iface* user,
 // Remove proxy with given name
 static int proxy_unset(struct proxy* proxyp) {
   bool found = false;
-  struct proxy *proxy, *n;
+  struct proxy* proxy;
+  struct proxy* n;
   list_for_each_entry_safe (proxy, n, &proxies, head) {
     if ((proxyp && proxy == proxyp) ||
         (!proxyp && (proxy->flags & _PROXY_UNUSED))) {
       mrib_detach_user(&proxy->mrib);
 
-      struct querier_user *user, *n;
+      struct querier_user* user;
+      struct querier_user* n;
       list_for_each_entry_safe (user, n, &proxy->querier.ifaces, head) {
         struct querier_user_iface* i =
             container_of(user, struct querier_user_iface, user);
@@ -135,15 +138,16 @@ int proxy_set(int uplink,
               const int downlinks[],
               size_t downlinks_cnt,
               enum proxy_flags flags) {
-  struct proxy *proxy = NULL, *p;
+  struct proxy* proxy = NULL;
+  struct proxy* p;
   list_for_each_entry (p, &proxies, head) {
     if (p->ifindex == uplink) {
       proxy = p;
     }
   }
 
-  if (proxy && (downlinks_cnt == 0 || ((proxy->flags & _PROXY_SCOPEMASK) !=
-                                       (flags & _PROXY_SCOPEMASK)))) {
+  if (proxy && (downlinks_cnt == 0 || ((proxy->flags & PROXY_SCOPE_MASK) !=
+                                       (flags & PROXY_SCOPE_MASK)))) {
     proxy_unset(proxy);
     proxy = NULL;
   }
@@ -152,12 +156,15 @@ int proxy_set(int uplink,
     return 0;
   }
 
+  bool present[downlinks_cnt];
+  memset(present, 0, sizeof(present));
   if (!proxy) {
-    if (!(proxy = calloc(1, sizeof(*proxy)))) {
+    proxy = calloc(1, sizeof(*proxy));
+    if (!proxy) {
       return -ENOMEM;
     }
 
-    if ((flags & _PROXY_SCOPEMASK) == 0) {
+    if ((flags & PROXY_SCOPE_MASK) == 0) {
       flags |= PROXY_GLOBAL;
     }
 
@@ -170,33 +177,30 @@ int proxy_set(int uplink,
     }
   }
 
-  struct querier_user *user, *n;
+  struct querier_user* user;
+  struct querier_user* n;
   list_for_each_entry_safe (user, n, &proxy->querier.ifaces, head) {
     struct querier_user_iface* iface =
         container_of(user, struct querier_user_iface, user);
+    int ifindex = iface->iface->ifindex;
 
     size_t i;
-    for (i = 0; i < downlinks_cnt && downlinks[i] == iface->iface->ifindex;
-         ++i) {
+    for (i = 0; i < downlinks_cnt && downlinks[i] == ifindex; ++i) {
     }
     if (i == downlinks_cnt) {
       proxy_remove_downlink(container_of(iface, struct proxy_downlink, iface));
+      continue;
+    }
+
+    for (i = 0; i < downlinks_cnt; ++i) {
+      if (downlinks[i] == ifindex) {
+        present[i] = true;
+      }
     }
   }
 
   for (size_t i = 0; i < downlinks_cnt; ++i) {
-    bool found = false;
-    struct querier_user* user;
-    list_for_each_entry (user, &proxy->querier.ifaces, head) {
-      struct querier_user_iface* iface =
-          container_of(user, struct querier_user_iface, user);
-      if (iface->iface->ifindex == downlinks[i]) {
-        found = true;
-        break;
-      }
-    }
-
-    if (found) {
+    if (present[i]) {
       continue;
     }
 
@@ -219,6 +223,11 @@ int proxy_set(int uplink,
     }
 
     downlink->flags = proxy->flags;
+    for (size_t j = i; j < downlinks_cnt; ++j) {
+      if (downlinks[j] == downlinks[i]) {
+        present[j] = true;
+      }
+    }
     continue;
 
   downlink_err1:

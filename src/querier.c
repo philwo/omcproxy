@@ -21,6 +21,7 @@
 #include <libubox/list.h>
 #include <libubox/usock.h>
 #include <libubox/ustream.h>
+#include <limits.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
@@ -145,7 +146,8 @@ static void querier_iface_timer(struct uloop_timeout* timeout) {
     next_event = iface->mld_next_query;
   }
 
-  uloop_timeout_set(&iface->timeout, (next_event > now) ? next_event - now : 0);
+  omgp_time_t delay = (next_event > now) ? next_event - now : 0;
+  uloop_timeout_set(&iface->timeout, delay > INT_MAX ? INT_MAX : (int)delay);
 }
 
 // Calculate QQI from QQIC
@@ -203,7 +205,8 @@ int querier_attach(struct querier_user_iface* user,
                    struct querier* querier,
                    int ifindex,
                    querier_iface_cb* cb) {
-  struct querier_iface *c, *iface = NULL;
+  struct querier_iface* c;
+  struct querier_iface* iface = NULL;
   list_for_each_entry (c, &ifaces, head) {
     if (c->ifindex == ifindex) {
       iface = c;
@@ -214,7 +217,8 @@ int querier_attach(struct querier_user_iface* user,
   omgp_time_t now = omgp_time();
   int res = 0;
   if (!iface) {
-    if (!(iface = calloc(1, sizeof(*iface)))) {
+    iface = calloc(1, sizeof(*iface));
+    if (!iface) {
       res = -errno;
       goto out;
     }
@@ -235,8 +239,8 @@ int querier_attach(struct querier_user_iface* user,
     iface->igmp_startup_tries = iface->groups.cfg_v4.robustness;
     iface->mld_startup_tries = iface->groups.cfg_v6.robustness;
 
-    if ((res = mrib_attach_querier(&iface->mrib, ifindex, igmp_handle,
-                                   mld_handle))) {
+    res = mrib_attach_querier(&iface->mrib, ifindex, igmp_handle, mld_handle);
+    if (res) {
       goto out;
     }
   }
@@ -293,7 +297,8 @@ int querier_init(struct querier* querier) {
 
 // Cleanup querier-instance
 void querier_deinit(struct querier* querier) {
-  struct querier_user *user, *n;
+  struct querier_user* user;
+  struct querier_user* n;
   list_for_each_entry_safe (user, n, &querier->ifaces, head) {
     querier_detach(container_of(user, struct querier_user_iface, user));
   }

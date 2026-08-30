@@ -19,6 +19,7 @@
 
 #include <endian.h>
 #include <errno.h>
+#include <limits.h>
 #include <net/if.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -126,7 +127,8 @@ static int mrib_set(const struct in6_addr* group,
     }
   }
 
-  char groupbuf[INET6_ADDRSTRLEN], sourcebuf[INET6_ADDRSTRLEN];
+  char groupbuf[INET6_ADDRSTRLEN];
+  char sourcebuf[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, group, groupbuf, sizeof(groupbuf));
   inet_ntop(AF_INET6, source, sourcebuf, sizeof(sourcebuf));
   if (del) {
@@ -151,12 +153,13 @@ static int mrib_set(const struct in6_addr* group,
 
 // We have no way of knowing when a source disappears, so we delete multicast
 // routes from time to time
-static void mrib_clean(struct uloop_timeout* t) {
-  struct mrib_iface* iface = container_of(t, struct mrib_iface, timer);
+static void mrib_clean_routes(struct mrib_iface* iface) {
+  struct uloop_timeout* timer = &iface->timer;
   omgp_time_t now = omgp_time();
-  uloop_timeout_cancel(t);
+  uloop_timeout_cancel(timer);
 
-  struct mrib_route *c, *n;
+  struct mrib_route* c;
+  struct mrib_route* n;
   list_for_each_entry_safe (c, n, &iface->routes, head) {
     if (c->valid_until <= now ||
         (list_empty(&iface->users) && list_empty(&iface->queriers))) {
@@ -164,8 +167,18 @@ static void mrib_clean(struct uloop_timeout* t) {
       list_del(&c->head);
       free(c);
     } else {
-      uloop_timeout_set(t, c->valid_until - now);
+      omgp_time_t delay = c->valid_until - now;
+      uloop_timeout_set(timer, delay > INT_MAX ? INT_MAX : (int)delay);
       break;
+    }
+  }
+}
+
+static void mrib_clean(struct uloop_timeout* timer) {
+  for (size_t i = 0; i < MAXMIFS; ++i) {
+    if (timer == &mifs[i].timer) {
+      mrib_clean_routes(&mifs[i]);
+      return;
     }
   }
 }
@@ -191,7 +204,8 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
     }
   }
 
-  char groupbuf[INET6_ADDRSTRLEN], sourcebuf[INET6_ADDRSTRLEN];
+  char groupbuf[INET6_ADDRSTRLEN];
+  char sourcebuf[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, group, groupbuf, sizeof(groupbuf));
   inet_ntop(AF_INET6, source, sourcebuf, sizeof(sourcebuf));
   L_DEBUG("%s: detected new multicast source %s for %s on %d", __FUNCTION__,
@@ -234,7 +248,8 @@ static uint16_t igmp_checksum(const uint16_t* buf, size_t len) {
 
 // Receive and handle MRT event
 static void mrib_receive_mrt(struct uloop_fd* fd, __unused unsigned flags) {
-  uint8_t buf[9216], cbuf[CMSG_SPACE(sizeof(struct in_pktinfo))];
+  uint8_t buf[9216];
+  uint8_t cbuf[CMSG_SPACE(sizeof(struct in_pktinfo))];
   char addrbuf[INET_ADDRSTRLEN];
   struct sockaddr_in from;
 
@@ -286,7 +301,8 @@ static void mrib_receive_mrt(struct uloop_fd* fd, __unused unsigned flags) {
       mrib_notify_newsource(iface, &dst, &src);
     } else {
       // IGMP packet
-      if ((len -= iph->ihl * 4) < 0) {
+      len -= (ssize_t)iph->ihl * 4;
+      if (len < 0) {
         continue;
       }
 
@@ -304,7 +320,7 @@ static void mrib_receive_mrt(struct uloop_fd* fd, __unused unsigned flags) {
       }
 
       inet_ntop(AF_INET, &from.sin_addr, addrbuf, sizeof(addrbuf));
-      struct igmphdr* igmp = (struct igmphdr*)&buf[iph->ihl * 4];
+      struct igmphdr* igmp = (struct igmphdr*)&buf[(size_t)iph->ihl * 4];
 
       uint16_t checksum = igmp->csum;
       igmp->csum = 0;
@@ -325,7 +341,7 @@ static void mrib_receive_mrt(struct uloop_fd* fd, __unused unsigned flags) {
         continue;
       }
 
-      ssize_t mifid = mrib_find(ifindex);
+      size_t mifid = mrib_find(ifindex);
       if (mifid < MAXMIFS) {
         struct mrib_querier* q;
         list_for_each_entry (q, &mifs[mifid].queriers, head) {
@@ -340,7 +356,8 @@ static void mrib_receive_mrt(struct uloop_fd* fd, __unused unsigned flags) {
 
 // Receive and handle MRT6 event
 static void mrib_receive_mrt6(struct uloop_fd* fd, __unused unsigned flags) {
-  uint8_t buf[9216], cbuf[128];
+  uint8_t buf[9216];
+  uint8_t cbuf[128];
   char addrbuf[INET6_ADDRSTRLEN];
   struct sockaddr_in6 from;
 
@@ -384,7 +401,11 @@ static void mrib_receive_mrt6(struct uloop_fd* fd, __unused unsigned flags) {
 
       mrib_notify_newsource(iface, &msg->im6_dst, &msg->im6_src);
     } else {
-      int hlim = 0, ifindex = from.sin6_scope_id;
+      int hlim = 0;
+      if (from.sin6_scope_id > INT_MAX) {
+        continue;
+      }
+      int ifindex = (int)from.sin6_scope_id;
       bool alert = false;
       for (struct cmsghdr* ch = CMSG_FIRSTHDR(&hdr); ch != NULL;
            ch = CMSG_NXTHDR(&hdr, ch)) {
@@ -407,7 +428,7 @@ static void mrib_receive_mrt6(struct uloop_fd* fd, __unused unsigned flags) {
         continue;
       }
 
-      ssize_t mifid = mrib_find(from.sin6_scope_id);
+      size_t mifid = mrib_find(ifindex);
       if (mifid < MAXMIFS) {
         struct mrib_querier* q;
         list_for_each_entry (q, &mifs[mifid].queriers, head) {
@@ -489,7 +510,8 @@ static int mrib_init(void) {
   int fd;
   int val;
 
-  if ((fd = socket(AF_INET, SOCK_RAW, IPPROTO_IGMP)) < 0) {
+  fd = socket(AF_INET, SOCK_RAW, IPPROTO_IGMP);
+  if (fd < 0) {
     goto err;
   }
 
@@ -525,7 +547,8 @@ static int mrib_init(void) {
 
   mrt_fd.fd = fd;
 
-  if ((fd = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6)) < 0) {
+  fd = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
+  if (fd < 0) {
     goto err;
   }
 
@@ -606,7 +629,8 @@ static struct mrib_iface* mrib_get_iface(int ifindex) {
   }
 
   errno = EBUSY;
-  if ((mifid = mrib_find(0)) >= MAXMIFS) {
+  mifid = mrib_find(0);
+  if (mifid >= MAXMIFS) {
     return NULL;
   }
 
@@ -650,7 +674,7 @@ static struct mrib_iface* mrib_get_iface(int ifindex) {
 static void mrib_clean_iface(struct mrib_iface* iface) {
   if (list_empty(&iface->users) && list_empty(&iface->queriers)) {
     iface->ifindex = 0;
-    mrib_clean(&iface->timer);
+    mrib_clean_routes(iface);
 
     size_t mifid = iface - mifs;
     struct vifctl ctl = {mifid,
@@ -739,51 +763,6 @@ void mrib_detach_querier(struct mrib_querier* querier) {
   querier->iface = NULL;
   list_del(&querier->head);
   mrib_clean_iface(iface);
-}
-
-static uint8_t prefix_contains(const struct in6_addr* p,
-                               uint8_t plen,
-                               const struct in6_addr* addr) {
-  int blen = plen >> 3;
-  if (blen && memcmp(p, addr, blen)) {
-    return 0;
-  }
-
-  int rem = plen & 0x07;
-  if (rem && ((p->s6_addr[blen] ^ addr->s6_addr[blen]) >> (8 - rem))) {
-    return 0;
-  }
-
-  return 1;
-}
-
-// Flush state for a multicast route
-int mrib_flush(struct mrib_user* user,
-               const struct in6_addr* group,
-               uint8_t group_plen,
-               const struct in6_addr* source) {
-  struct mrib_iface* iface = user->iface;
-  if (!iface) {
-    return -ENOENT;
-  }
-
-  bool found = false;
-  struct mrib_route *route, *n;
-  list_for_each_entry_safe (route, n, &iface->routes, head) {
-    if (prefix_contains(group, group_plen, &route->group) &&
-        (!source || IN6_ARE_ADDR_EQUAL(&route->source, source))) {
-      route->valid_until = 0;
-      list_del(&route->head);
-      list_add(&route->head, &iface->routes);
-      found = true;
-    }
-  }
-
-  if (found) {
-    mrib_clean(&iface->timer);
-  }
-
-  return (found) ? 0 : -ENOENT;
 }
 
 // Add an interface to the filter

@@ -19,6 +19,7 @@
 
 #include "groups.h"
 #include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -37,9 +38,29 @@ static void querier_remove_source(struct group* group,
 
 // Clear all sources of a certain group
 static void querier_clear_sources(struct group* group) {
-  struct group_source *s, *n;
+  struct group_source* s;
+  struct group_source* n;
   list_for_each_entry_safe (s, n, &group->sources, head) {
     querier_remove_source(group, s);
+  }
+}
+
+static void querier_remove_unlisted_sources(struct group* group,
+                                            const struct in6_addr* addrs,
+                                            size_t len) {
+  struct group_source* source;
+  struct group_source* next;
+  list_for_each_entry_safe (source, next, &group->sources, head) {
+    bool listed = false;
+    for (size_t i = 0; i < len; ++i) {
+      if (IN6_ARE_ADDR_EQUAL(&source->addr, &addrs[i])) {
+        listed = true;
+        break;
+      }
+    }
+    if (!listed) {
+      querier_remove_source(group, source);
+    }
   }
 }
 
@@ -72,7 +93,8 @@ static omgp_time_t expire_group(struct groups* groups,
   // Handle group and source-specific query retransmission
   struct list_head suppressed = LIST_HEAD_INIT(suppressed);
   struct list_head unsuppressed = LIST_HEAD_INIT(unsuppressed);
-  struct group_source *s, *s2;
+  struct group_source* s;
+  struct group_source* s2;
 
   if (group->next_source_transmit > 0 && group->next_source_transmit <= now) {
     group->next_source_transmit = 0;
@@ -171,10 +193,11 @@ static omgp_time_t expire_group(struct groups* groups,
 }
 
 // Rearm the global groups-timer if the next event is before timer expiration
-static void rearm_timer(struct groups* groups, int msecs) {
+static void rearm_timer(struct groups* groups, omgp_time_t msecs) {
+  int delay = msecs > INT_MAX ? INT_MAX : msecs > 0 ? (int)msecs : 0;
   int64_t remain = uloop_timeout_remaining64(&groups->timer);
-  if (remain < 0 || remain >= msecs) {
-    uloop_timeout_set(&groups->timer, msecs);
+  if (remain < 0 || remain >= delay) {
+    uloop_timeout_set(&groups->timer, delay);
   }
 }
 
@@ -184,7 +207,8 @@ static void expire_groups(struct uloop_timeout* t) {
   omgp_time_t now = omgp_time();
   omgp_time_t next_event = now + 3600 * OMGP_TIME_PER_SECOND;
 
-  struct group *group, *n;
+  struct group* group;
+  struct group* n;
   avl_for_each_element_safe(&groups->groups, group, node, n) next_event =
       expire_group(groups, group, now, next_event);
 
@@ -205,7 +229,8 @@ void groups_init(struct groups* groups) {
 // Cleanup a group-state
 void groups_deinit(struct groups* groups) {
   omgp_time_t now = omgp_time();
-  struct group *group, *safe;
+  struct group* group;
+  struct group* safe;
   avl_for_each_element_safe(&groups->groups, group, node, safe)
       querier_remove_group(groups, group, now);
   uloop_timeout_cancel(&groups->timer);
@@ -216,13 +241,16 @@ static struct group* groups_get_group(struct groups* groups,
                                       const struct in6_addr* addr,
                                       bool* created) {
   struct group* group = avl_find_element(&groups->groups, addr, group, node);
-  if (!group && created && (group = calloc(1, sizeof(*group)))) {
-    group->addr = *addr;
-    group->node.key = &group->addr;
-    avl_insert(&groups->groups, &group->node);
+  if (!group && created) {
+    group = calloc(1, sizeof(*group));
+    if (group) {
+      group->addr = *addr;
+      group->node.key = &group->addr;
+      avl_insert(&groups->groups, &group->node);
 
-    INIT_LIST_HEAD(&group->sources);
-    *created = true;
+      INIT_LIST_HEAD(&group->sources);
+    }
+    *created = group != NULL;
   } else if (created) {
     *created = false;
   }
@@ -234,19 +262,22 @@ static struct group_source* groups_get_source(struct groups* groups,
                                               struct group* group,
                                               const struct in6_addr* addr,
                                               bool* created) {
-  struct group_source *c, *source = NULL;
+  struct group_source* c;
+  struct group_source* source = NULL;
   group_for_each_source (c, group) {
     if (IN6_ARE_ADDR_EQUAL(&c->addr, addr)) {
       source = c;
     }
   }
 
-  if (!source && created && group->source_count < groups->source_limit &&
-      (source = calloc(1, sizeof(*source)))) {
-    source->addr = *addr;
-    list_add_tail(&source->head, &group->sources);
-    ++group->source_count;
-    *created = true;
+  if (!source && created && group->source_count < groups->source_limit) {
+    source = calloc(1, sizeof(*source));
+    if (source) {
+      source->addr = *addr;
+      list_add_tail(&source->head, &group->sources);
+      ++group->source_count;
+    }
+    *created = source != NULL;
   } else if (created) {
     *created = false;
   }
@@ -318,7 +349,8 @@ void groups_update_state(struct groups* groups,
                          const struct in6_addr* addrs,
                          size_t len,
                          enum groups_update update) {
-  bool created = false, changed = false;
+  bool created = false;
+  bool changed = false;
   char addrbuf[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, groupaddr, addrbuf, sizeof(addrbuf));
   L_DEBUG("%s: %s (+%d sources) => %d", __FUNCTION__, addrbuf, (int)len,
@@ -380,7 +412,6 @@ void groups_update_state(struct groups* groups,
   omgp_time_t llqt = now + (cfg->last_listener_query_interval * llqc);
 
   // RFC 3810 7.4
-  struct list_head saved = LIST_HEAD_INIT(saved);
   struct list_head queried = LIST_HEAD_INIT(queried);
   for (size_t i = 0; i < len; ++i) {
     bool* create = (include && update == UPDATE_BLOCK) ? NULL : &created;
@@ -435,9 +466,6 @@ void groups_update_state(struct groups* groups,
 
       if (query) {
         list_move_tail(&source->head, &queried);
-      } else if (update == UPDATE_IS_EXCLUDE || update == UPDATE_TO_EX ||
-                 update == UPDATE_SET_EX || update == UPDATE_SET_IN) {
-        list_move_tail(&source->head, &saved);
       }
     }
   }
@@ -448,8 +476,7 @@ void groups_update_state(struct groups* groups,
       changed = true;
     }
 
-    querier_clear_sources(group);
-    list_splice(&saved, &group->sources);
+    querier_remove_unlisted_sources(group, addrs, len);
     group->exclude_until = mali;
 
     if (next_event > mali) {
@@ -463,14 +490,14 @@ void groups_update_state(struct groups* groups,
       next_event = now;
     }
 
-    querier_clear_sources(group);
-    list_splice(&saved, &group->sources);
+    querier_remove_unlisted_sources(group, addrs, len);
     group->exclude_until = now;
   }
 
   // Prepare queries
   if (update == UPDATE_TO_IN) {
-    struct group_source *source, *n;
+    struct group_source* source;
+    struct group_source* n;
     list_for_each_entry_safe (source, n, &group->sources, head) {
       if (source->include_until <= now) {
         continue;

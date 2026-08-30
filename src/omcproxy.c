@@ -15,6 +15,7 @@
  *
  */
 
+#include <errno.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <signal.h>
@@ -43,12 +44,12 @@ static struct blobmsg_policy proxy_policy[PROXY_ATTR_MAX] = {
 };
 
 static int handle_proxy_set(void* data, size_t len) {
-  struct blob_attr *tb[PROXY_ATTR_MAX], *c;
+  struct blob_attr* tb[PROXY_ATTR_MAX];
+  struct blob_attr* c;
   blobmsg_parse(proxy_policy, PROXY_ATTR_MAX, tb, data, len);
 
-  const char* name =
-      ((c = tb[PROXY_ATTR_SOURCE])) ? blobmsg_get_string(c) : NULL;
-  int uplink = 0;
+  c = tb[PROXY_ATTR_SOURCE];
+  const char* name = c ? blobmsg_get_string(c) : NULL;
   int downlinks[32] = {0};
   size_t downlinks_cnt = 0;
   enum proxy_flags flags = 0;
@@ -57,12 +58,14 @@ static int handle_proxy_set(void* data, size_t len) {
     return -EINVAL;
   }
 
-  if (!(uplink = if_nametoindex(name))) {
+  int uplink = (int)if_nametoindex(name);
+  if (!uplink) {
     L_WARN("%s(%s): %s", __FUNCTION__, name, strerror(errno));
     return -errno;
   }
 
-  if ((c = tb[PROXY_ATTR_SCOPE])) {
+  c = tb[PROXY_ATTR_SCOPE];
+  if (c) {
     const char* scope = blobmsg_get_string(c);
     if (!strcmp(scope, "global")) {
       flags = PROXY_GLOBAL;
@@ -82,7 +85,8 @@ static int handle_proxy_set(void* data, size_t len) {
     }
   }
 
-  if ((c = tb[PROXY_ATTR_DEST])) {
+  c = tb[PROXY_ATTR_DEST];
+  if (c) {
     struct blob_attr* d;
     unsigned rem;
     blobmsg_for_each_attr(d, c, rem) {
@@ -94,20 +98,25 @@ static int handle_proxy_set(void* data, size_t len) {
 
       const char* n =
           blobmsg_type(d) == BLOBMSG_TYPE_STRING ? blobmsg_get_string(d) : "";
-      if (!(downlinks[downlinks_cnt++] = if_nametoindex(n))) {
+      int downlink = (int)if_nametoindex(n);
+      if (!downlink) {
         L_WARN("%s(%s): %s (%s)", __FUNCTION__, name, strerror(errno),
                blobmsg_get_string(d));
         return -errno;
       }
+      downlinks[downlinks_cnt++] = downlink;
     }
   }
 
   return proxy_set(uplink, downlinks, downlinks_cnt, flags);
 }
 
-static void handle_signal(__unused int signal) {
+static void handle_signal(__unused struct uloop_signal* signal) {
   uloop_end();
 }
+
+static struct uloop_signal sigint = {.cb = handle_signal, .signo = SIGINT};
+static struct uloop_signal sigterm = {.cb = handle_signal, .signo = SIGTERM};
 
 static void usage(const char* arg) {
   fprintf(
@@ -127,8 +136,6 @@ static void usage(const char* arg) {
 }
 
 int main(int argc, char** argv) {
-  signal(SIGINT, handle_signal);
-  signal(SIGTERM, handle_signal);
   signal(SIGHUP, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
   openlog("omcproxy", LOG_PERROR | LOG_PID, LOG_DAEMON);
@@ -140,6 +147,10 @@ int main(int argc, char** argv) {
   }
 
   uloop_init();
+  if (uloop_signal_add(&sigint) || uloop_signal_add(&sigterm)) {
+    L_ERR("failed to set up signal handling: %s", strerror(errno));
+    return 2;
+  }
   bool start = true;
 
   for (ssize_t i = 1; i < argc; ++i) {
@@ -151,10 +162,14 @@ int main(int argc, char** argv) {
       usage(argv[0]);
       return 1;
     } else if (!strncmp(argv[i], "-v", 2)) {
-      int log_level;
-      if ((log_level = atoi(&argv[i][2])) <= 0) {
-        log_level = LOG_DEBUG;
-      }
+      const char* value = &argv[i][2];
+      char* end = NULL;
+      errno = 0;
+      long parsed = strtol(value, &end, 10);
+      int log_level = errno == 0 && end != value && *end == '\0' &&
+                              parsed > 0 && parsed <= LOG_DEBUG
+                          ? (int)parsed
+                          : LOG_DEBUG;
       setlogmask(LOG_UPTO(log_level));
       continue;
     }
@@ -201,6 +216,8 @@ int main(int argc, char** argv) {
   proxy_update(true);
   proxy_flush();
 
+  uloop_signal_delete(&sigterm);
+  uloop_signal_delete(&sigint);
   uloop_done();
   return 0;
 }
