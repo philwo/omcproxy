@@ -33,12 +33,12 @@
 
 #endif /* __APPLE__ */
 
+#include <libubox/utils.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <time.h>
-#include <syslog.h>
 #include <sys/types.h>
-#include <libubox/utils.h>
+#include <syslog.h>
+#include <time.h>
 
 #define STR_EXPAND(tok) #tok
 #define STR(tok) STR_EXPAND(tok)
@@ -48,10 +48,10 @@ typedef int64_t omgp_time_t;
 #define OMGP_TIME_PER_SECOND INT64_C(1000)
 
 static inline omgp_time_t omgp_time(void) {
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ((omgp_time_t)ts.tv_sec * OMGP_TIME_PER_SECOND) +
-			((omgp_time_t)ts.tv_nsec / (1000000000 / OMGP_TIME_PER_SECOND));
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ((omgp_time_t)ts.tv_sec * OMGP_TIME_PER_SECOND) +
+         ((omgp_time_t)ts.tv_nsec / (1000000000 / OMGP_TIME_PER_SECOND));
 }
 
 // Logging macros
@@ -73,8 +73,8 @@ static inline omgp_time_t omgp_time(void) {
 #endif
 
 #ifndef container_of
-#define container_of(ptr, type, member) (           \
-    (type *)( (char *)ptr - offsetof(type,member) ))
+#define container_of(ptr, type, member) \
+  ((type*)((char*)ptr - offsetof(type, member)))
 #endif
 
 #ifndef __unused

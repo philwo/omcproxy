@@ -1,0 +1,13 @@
+BasedOnStyle: Chromium
+InsertBraces: true
+ForEachMacros:
+  - list_for_each
+  - list_for_each_prev
+  - list_for_each_entry
+  - list_for_each_entry_continue
+  - list_for_each_entry_reverse
+  - list_for_each_entry_safe
+  - list_for_each_safe
+  - groups_for_each_group
+  - group_for_each_source
+  - group_for_each_active_source

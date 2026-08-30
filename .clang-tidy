@@ -1,0 +1,11 @@
+---
+Checks: >-
+  -*,
+  readability-braces-around-statements
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/(src|test)/.*'
+SystemHeaders: false
+FormatStyle: file
+InheritParentConfig: false
+CheckOptions:
+  readability-braces-around-statements.ShortStatementLines: '0'

@@ -17,29 +17,30 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <netinet/in.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 enum proxy_flags {
-	// minimum scope to proxy (use only one, includes higher scopes)
-	PROXY_REALMLOCAL = 3,
-	PROXY_ADMINLOCAL = 4,
-	PROXY_SITELOCAL = 5,
-	PROXY_ORGLOCAL = 8,
-	PROXY_GLOBAL = 0xe,
+  // minimum scope to proxy (use only one, includes higher scopes)
+  PROXY_REALMLOCAL = 3,
+  PROXY_ADMINLOCAL = 4,
+  PROXY_SITELOCAL = 5,
+  PROXY_ORGLOCAL = 8,
+  PROXY_GLOBAL = 0xe,
 
-	// proxy may be flushed (from static config source)
-	PROXY_FLUSHABLE = 1 << 4,
+  // proxy may be flushed (from static config source)
+  PROXY_FLUSHABLE = 1 << 4,
 
-	// internal values
-	_PROXY_UNUSED = 1 << 5,
-	_PROXY_SCOPEMASK = 0xf,
+  // internal values
+  _PROXY_UNUSED = 1 << 5,
+  _PROXY_SCOPEMASK = 0xf,
 };
 
-
-int proxy_set(int uplink, const int downlinks[], size_t downlinks_cnt, enum proxy_flags flags);
-
+int proxy_set(int uplink,
+              const int downlinks[],
+              size_t downlinks_cnt,
+              enum proxy_flags flags);
 
 void proxy_update(bool all);
 void proxy_flush(void);
