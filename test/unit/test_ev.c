@@ -1,5 +1,6 @@
 #include <string.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "src/ev.h"
@@ -84,6 +85,16 @@ static void test_timer_remaining(void) {
   ev_timer_cancel(&t1);
 }
 
+static void test_timer_remaining_overdue_pending(void) {
+  t1 = (struct ev_timer){.cb = record_1};
+  ev_timer_set(&t1, 0);
+  struct timespec ts = {.tv_nsec = 2000000};
+  nanosleep(&ts, NULL);
+  CHECK(t1.pending);
+  CHECK(ev_timer_remaining(&t1) == 0);
+  ev_timer_cancel(&t1);
+}
+
 static int sp[2];
 static struct ev_fd efd;
 static int fd_events;
@@ -148,6 +159,7 @@ int main(void) {
   test_timer_cancel();
   test_timer_rearm_in_callback();
   test_timer_remaining();
+  test_timer_remaining_overdue_pending();
   test_fd_readiness();
   test_fd_edge_triggered();
   ev_deinit();

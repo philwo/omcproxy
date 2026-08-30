@@ -198,5 +198,6 @@ omgp_time_t ev_timer_remaining(const struct ev_timer* timer) {
   if (!timer->pending) {
     return -1;
   }
-  return timer->deadline - omgp_time();
+  omgp_time_t remaining = timer->deadline - omgp_time();
+  return (remaining > 0) ? remaining : 0;
 }

@@ -64,7 +64,8 @@ omgp_time_t ev_timer_remaining(const struct ev_timer* timer) {
   if (!timer->pending) {
     return -1;
   }
-  return timer->deadline - stub_now;
+  omgp_time_t remaining = timer->deadline - stub_now;
+  return (remaining > 0) ? remaining : 0;
 }
 
 void stub_advance(omgp_time_t delta) {
