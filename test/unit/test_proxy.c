@@ -18,6 +18,7 @@ static struct mrib_user* uplink_user;
 static struct mrib_user* refreshed_user;
 static struct in6_addr refreshed_group;
 static int refresh_count;
+static int mrib_attach_failure_ifindex;
 
 omgp_time_t omgp_time(void) {
   return 0;
@@ -57,7 +58,9 @@ int client_set(struct client* client,
 }
 
 int mrib_attach_user(struct mrib_user* user, int ifindex, mrib_cb* callback) {
-  (void)ifindex;
+  if (ifindex == mrib_attach_failure_ifindex) {
+    return -EIO;
+  }
   user->cb_newsource = callback;
   if (callback) {
     uplink_user = user;
@@ -158,8 +161,24 @@ static void test_membership_callback_refreshes_matching_group(void) {
   proxy_flush();
 }
 
+static void test_failed_update_preserves_existing_proxy(void) {
+  int initial[] = {20};
+  CHECK(proxy_set(10, initial, 1, PROXY_GLOBAL) == 0);
+  detached_count = 0;
+
+  int updated[] = {20, 30};
+  mrib_attach_failure_ifindex = 30;
+  CHECK(proxy_set(10, updated, 2, PROXY_GLOBAL) == -EIO);
+  CHECK(detached_count == 0);
+
+  mrib_attach_failure_ifindex = 0;
+  CHECK(proxy_set(10, initial, 1, PROXY_GLOBAL) == 0);
+  proxy_flush();
+}
+
 int main(void) {
   test_stale_downlink_scan();
   test_membership_callback_refreshes_matching_group();
+  test_failed_update_preserves_existing_proxy();
   return test_result();
 }

@@ -148,16 +148,19 @@ int proxy_set(int uplink,
     proxy = NULL;
   }
 
-  if (downlinks_cnt <= 0) {
+  if (downlinks_cnt == 0) {
     return 0;
   }
 
+  bool created = false;
+  int res = 0;
   bool present[PROXY_MAX_DOWNLINKS] = {false};
   if (!proxy) {
     proxy = calloc(1, sizeof(*proxy));
     if (!proxy) {
       return -ENOMEM;
     }
+    created = true;
 
     if ((flags & PROXY_SCOPE_MASK) == 0) {
       flags |= PROXY_GLOBAL;
@@ -167,7 +170,8 @@ int proxy_set(int uplink,
     proxy->ifindex = uplink;
     querier_init(&proxy->querier);
     list_add(&proxy->head, &proxies);
-    if (mrib_attach_user(&proxy->mrib, uplink, proxy_mrib)) {
+    res = mrib_attach_user(&proxy->mrib, uplink, proxy_mrib);
+    if (res) {
       goto err;
     }
   }
@@ -201,19 +205,23 @@ int proxy_set(int uplink,
 
     struct proxy_downlink* downlink = calloc(1, sizeof(*downlink));
     if (!downlink) {
+      res = -ENOMEM;
       goto err;
     }
 
-    if (client_init(&downlink->client, uplink)) {
+    res = client_init(&downlink->client, uplink);
+    if (res) {
       goto downlink_err3;
     }
 
-    if (mrib_attach_user(&downlink->mrib, downlinks[i], NULL)) {
+    res = mrib_attach_user(&downlink->mrib, downlinks[i], NULL);
+    if (res) {
       goto downlink_err2;
     }
 
-    if (querier_attach(&downlink->iface, &proxy->querier, downlinks[i],
-                       proxy_trigger)) {
+    res = querier_attach(&downlink->iface, &proxy->querier, downlinks[i],
+                         proxy_trigger);
+    if (res) {
       goto downlink_err1;
     }
 
@@ -237,8 +245,10 @@ int proxy_set(int uplink,
   return 0;
 
 err:
-  proxy_unset(proxy);
-  return -errno;
+  if (created) {
+    proxy_unset(proxy);
+  }
+  return res;
 }
 
 // Remove all proxies
