@@ -36,6 +36,7 @@
 #include <linux/mroute.h>
 #include <linux/mroute6.h>
 
+#include "addr.h"
 #include "ev.h"
 #include "gmp.h"
 #include "mrib.h"
@@ -607,7 +608,7 @@ static void mrib_receive_mrt6(struct ev_fd* fd,
       }
       inet_ntop(AF_INET6, &from.sin6_addr, addrbuf, sizeof(addrbuf));
 
-      if (!IN6_IS_ADDR_LINKLOCAL(&from.sin6_addr) || hlim != 1 ||
+      if (!addr_is_linklocal(&from.sin6_addr) || hlim != 1 ||
           len < (ssize_t)sizeof(struct mld_hdr) || !alert) {
         L_WARN("mld: ignoring invalid MLD-message of type %d from %s on %d",
                mld->mld_icmp6_hdr.icmp6_type, addrbuf, ifindex);

@@ -60,11 +60,34 @@ static void test_ssm_ranges(void) {
   CHECK(!addr_is_ssm(&a));
 }
 
+static void test_linklocal_requires_fe80_64(void) {
+  struct in6_addr a;
+
+  a = addr("fe80::1");
+  CHECK(addr_is_linklocal(&a));
+  a = addr("fe80::0123:4567:89ab:cdef");
+  CHECK(addr_is_linklocal(&a));
+
+  a = addr("fe80:1::1");
+  CHECK(!addr_is_linklocal(&a));
+  a = addr("fe80:0:0:1::1");
+  CHECK(!addr_is_linklocal(&a));
+  a = addr("fe81::1");
+  CHECK(!addr_is_linklocal(&a));
+  a = addr("febf::1");
+  CHECK(!addr_is_linklocal(&a));
+  a = addr("fec0::1");
+  CHECK(!addr_is_linklocal(&a));
+  a = addr("2001:db8::1");
+  CHECK(!addr_is_linklocal(&a));
+}
+
 int main(void) {
   test_formats_ipv6();
   test_formats_v4mapped_as_ipv4();
   test_small_buffer_returns_placeholder();
   test_full_length_address_fits();
   test_ssm_ranges();
+  test_linklocal_requires_fe80_64();
   return test_result();
 }

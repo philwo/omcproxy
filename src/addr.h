@@ -35,6 +35,14 @@ static inline in_addr_t addr_unmap(const struct in6_addr* addr6) {
   return addr6->s6_addr32[3];
 }
 
+// Test for a well-formed link-local unicast address: fe80::/10 followed by
+// 54 zero bits (RFC 4291 2.5.6), i.e. fe80::/64
+static inline bool addr_is_linklocal(const struct in6_addr* addr) {
+  return addr->s6_addr[0] == 0xfe && addr->s6_addr[1] == 0x80 &&
+         addr->s6_addr32[1] == 0 && (addr->s6_addr[2] | addr->s6_addr[3]) == 0;
+}
+
+// Test for the source-specific ranges 232/8 and ff3x::/32 (RFC 4607)
 static inline bool addr_is_ssm(const struct in6_addr* addr) {
   if (IN6_IS_ADDR_V4MAPPED(addr)) {
     return addr->s6_addr[12] == 232;
