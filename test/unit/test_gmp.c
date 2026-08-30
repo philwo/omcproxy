@@ -611,6 +611,33 @@ static void test_mld_zero_group_with_sources_ignored(void) {
   teardown();
 }
 
+static void test_igmp_query_source_beyond_76_processed(void) {
+  setup();
+  struct in6_addr grp;
+  struct in6_addr s1;
+  addr_map(&grp, addr4("232.7.7.7"));
+  addr_map(&s1, addr4("10.0.7.7"));
+
+  in_addr_t rep_srcs[1] = {addr4("10.0.7.7")};
+  igmp_input(build_igmp_report(pkt, UPDATE_IS_INCLUDE, addr4("232.7.7.7"),
+                               rep_srcs, 1));
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+
+  in_addr_t qsrcs[77];
+  for (uint32_t i = 0; i < 76; ++i) {
+    qsrcs[i] = htobe32(UINT32_C(0x0a010000) + i);
+  }
+  qsrcs[76] = addr4("10.0.7.7");
+  size_t len = build_igmp_query(pkt, addr4("232.7.7.7"), qsrcs, 77, false);
+  pkt[1] = 10;
+  igmp_input(len);
+
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  teardown();
+}
+
 static void test_float8_codec(void) {
   CHECK(gmp_float8_decode(0) == 0);
   CHECK(gmp_float8_decode(127) == 127);
@@ -792,5 +819,6 @@ int main(void) {
   test_mld_general_query_mrc_zero();
   test_igmp_zero_group_with_sources_ignored();
   test_mld_zero_group_with_sources_ignored();
+  test_igmp_query_source_beyond_76_processed();
   return test_result();
 }

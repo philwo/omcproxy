@@ -164,7 +164,7 @@ struct mld_query {
 
 struct gmp_query {
   struct in6_addr group;
-  const struct in6_addr* sources;
+  const uint8_t* sources;
   size_t nsrc;
   bool general;
   bool suppress;
@@ -262,6 +262,31 @@ static void gmp_handle_report(struct groups* groups,
   }
 }
 
+static void gmp_update_query_timers(struct querier_iface* q,
+                                    enum gmp_family family,
+                                    const struct gmp_query* p) {
+  if (p->nsrc == 0) {
+    groups_update_timers(&q->groups, &p->group, NULL, 0);
+    return;
+  }
+
+  struct in6_addr sources[32];
+  size_t address_length = gmp_addr_len(family);
+  size_t offset = 0;
+  while (offset < p->nsrc) {
+    size_t count = p->nsrc - offset;
+    if (count > sizeof(sources) / sizeof(sources[0])) {
+      count = sizeof(sources) / sizeof(sources[0]);
+    }
+    for (size_t i = 0; i < count; ++i) {
+      gmp_load_addr(family, &sources[i],
+                    &p->sources[(offset + i) * address_length]);
+    }
+    groups_update_timers(&q->groups, &p->group, sources, count);
+    offset += count;
+  }
+}
+
 // Handle a normalized query: run the querier election and update timers.
 // Legacy short queries are deliberately excluded from the election.
 static void gmp_handle_query(struct querier_iface* q,
@@ -272,7 +297,7 @@ static void gmp_handle_query(struct querier_iface* q,
   omgp_time_t now = omgp_time();
 
   if (!p->suppress && !p->general) {
-    groups_update_timers(&q->groups, &p->group, p->sources, p->nsrc);
+    gmp_update_query_timers(q, family, p);
   }
 
   if (election != 0 && p->full_length) {
@@ -349,7 +374,6 @@ void igmp_handle(struct mrib_querier* mrib,
       p.mrd = (omgp_time_t)100 * igmp->code;
     }
 
-    struct in6_addr sources[QUERIER_MAX_SOURCE + 1];
     if (p.full_length) {
       if (query->qrv) {
         p.robustness = query->qrv;
@@ -360,13 +384,7 @@ void igmp_handle(struct mrib_querier* mrib,
 
       p.suppress = query->suppress;
       p.nsrc = ntohs(query->nsrcs);
-      if (p.nsrc > QUERIER_MAX_SOURCE + 1) {
-        p.nsrc = QUERIER_MAX_SOURCE + 1;
-      }
-      for (size_t i = 0; i < p.nsrc; ++i) {
-        addr_map(&sources[i], query->srcs[i]);
-      }
-      p.sources = sources;
+      p.sources = (const uint8_t*)query->srcs;
     }
 
     gmp_handle_query(q, GMP_IGMP, &p,
@@ -437,7 +455,7 @@ void mld_handle(struct mrib_querier* mrib,
         .mrd = 10000,
         .query_interval = 125000,
         .full_length = len > sizeof(struct mld_hdr),
-        .sources = query->addrs,
+        .sources = (const uint8_t*)query->addrs,
     };
 
     uint16_t mrc = ntohs(hdr->mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0]);
