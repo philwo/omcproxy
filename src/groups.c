@@ -531,13 +531,15 @@ void groups_update_state(struct groups* groups,
     list_for_each_entry (source, &queried, head) {
       if (source->include_until > llqt) {
         source->include_until = llqt;
+        source->retransmit = llqc;
+        group->next_source_transmit = now;
+        next_event = now;
+      } else if (source->retransmit > 0) {
+        group->next_source_transmit = now;
+        next_event = now;
       }
-
-      group->next_source_transmit = now;
-      source->retransmit = llqc;
     }
 
-    next_event = now;
     list_splice(&queried, &group->sources);
   }
 

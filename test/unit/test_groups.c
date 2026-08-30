@@ -237,6 +237,55 @@ static void test_overdue_timer_not_postponed(void) {
   groups_deinit(&g);
 }
 
+static void test_repeated_block_sends_immediate_query_keeps_counter(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::66");
+  struct in6_addr s1 = addr("2001:db8::6");
+
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_IS_INCLUDE);
+  query_calls = 0;
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+
+  stub_advance(OMGP_TIME_PER_SECOND / 2);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  stub_advance(0);
+  CHECK(query_calls == 2);
+
+  stub_advance(2 * OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 2);
+
+  groups_deinit(&g);
+}
+
+static void test_repeated_to_in_restarts_group_query_sequence(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::cc");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  query_calls = 0;
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+
+  stub_advance(OMGP_TIME_PER_SECOND / 2);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  stub_advance(0);
+  CHECK(query_calls == 2);
+
+  stub_advance(OMGP_TIME_PER_SECOND / 2);
+  CHECK(query_calls == 2);
+
+  stub_advance(OMGP_TIME_PER_SECOND / 2);
+  CHECK(query_calls == 3);
+
+  stub_advance(5 * OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 3);
+
+  groups_deinit(&g);
+}
+
 static void test_group_limit_enforced(void) {
   setup();
   g.group_limit = 2;
@@ -285,6 +334,8 @@ int main(void) {
   test_source_overflow_falls_back_to_asm();
   test_source_overflow_mid_update_falls_back_to_asm();
   test_overdue_timer_not_postponed();
+  test_repeated_block_sends_immediate_query_keeps_counter();
+  test_repeated_to_in_restarts_group_query_sequence();
   test_group_limit_enforced();
   test_other_querier_timer_update();
   return test_result();
