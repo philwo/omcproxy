@@ -44,17 +44,16 @@ void client_deinit(struct client* client) {
   client->ifindex = 0;
 }
 
-int client_set(struct client* client,
-               const struct in6_addr* group,
-               bool include,
-               const struct in6_addr sources[],
-               size_t count) {
+void client_set(struct client* client,
+                const struct in6_addr* group,
+                bool include,
+                const struct in6_addr sources[],
+                size_t count) {
   (void)client;
   (void)group;
   (void)include;
   (void)sources;
   (void)count;
-  return 0;
 }
 
 int mrib_attach_user(struct mrib_user* user, int ifindex, mrib_cb* callback) {

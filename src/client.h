@@ -21,14 +21,19 @@
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include "ev.h"
+#include "list.h"
 #include "omcproxy.h"
 
 #define CLIENT_MAX_SOURCES 75
 
 struct client {
-  int igmp_fd;
-  int mld_fd;
   int ifindex;
+  struct list_head socks_v4;
+  struct list_head socks_v6;
+  struct list_head memberships;
+  struct ev_timer retry;
+  omgp_time_t backoff;
 };
 
 // Register a new interface to proxy
@@ -38,11 +43,11 @@ int client_init(struct client* client, int ifindex);
 void client_deinit(struct client* client);
 
 // Set / update / delete a multicast proxy entry
-int client_set(struct client* client,
-               const struct in6_addr* group,
-               bool include,
-               const struct in6_addr sources[],
-               size_t cnt);
+void client_set(struct client* client,
+                const struct in6_addr* group,
+                bool include,
+                const struct in6_addr sources[],
+                size_t cnt);
 
 // Unmap IPv4 address
 static inline void client_unmap(struct in_addr* addr4,
