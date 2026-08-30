@@ -517,6 +517,15 @@ void groups_update_state(struct groups* groups,
   omgp_time_t llqt = now + (cfg->last_listener_query_interval * llqc);
 
   if (addr_is_ssm(groupaddr) && !(include && update == UPDATE_BLOCK)) {
+    struct group_source* stale;
+    struct group_source* stale2;
+    list_for_each_entry_safe (stale, stale2, &group->sources, head) {
+      if (stale->include_until <= now &&
+          (stale->retransmit <= 0 || stale->expire_cap <= now)) {
+        groups_remove_source(group, stale);
+      }
+    }
+
     size_t needed = 0;
     for (size_t i = 0; i < len; ++i) {
       bool duplicate = false;

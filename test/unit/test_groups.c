@@ -307,6 +307,44 @@ static void test_ssm_source_overflow_preserves_existing_state(void) {
   groups_deinit(&g);
 }
 
+static void test_ssm_preflight_ignores_expired_sources(void) {
+  setup();
+  g.source_limit = 2;
+  struct in6_addr grp = addr("ff35::8888");
+  struct in6_addr old[2] = {addr("2001:db8::1"), addr("2001:db8::2")};
+  struct in6_addr fresh = addr("2001:db8::3");
+
+  groups_update_state(&g, &grp, old, 2, UPDATE_IS_INCLUDE);
+
+  stub_now += 261 * OMGP_TIME_PER_SECOND;
+  groups_update_state(&g, &grp, &fresh, 1, UPDATE_IS_INCLUDE);
+  CHECK(groups_includes_group(&g, &grp, &fresh, stub_now));
+  CHECK(!groups_includes_group(&g, &grp, &old[0], stub_now));
+
+  stub_advance(0);
+  CHECK(groups_includes_group(&g, &grp, &fresh, stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_ssm_preflight_purges_pending_source_past_cap(void) {
+  setup();
+  g.source_limit = 1;
+  struct in6_addr grp = addr("ff35::9999");
+  struct in6_addr old = addr("2001:db8::1");
+  struct in6_addr fresh = addr("2001:db8::2");
+
+  groups_update_state(&g, &grp, &old, 1, UPDATE_IS_INCLUDE);
+  groups_update_state(&g, &grp, &old, 1, UPDATE_BLOCK);
+
+  stub_now += 300 * OMGP_TIME_PER_SECOND;
+  groups_update_state(&g, &grp, &fresh, 1, UPDATE_IS_INCLUDE);
+  CHECK(groups_includes_group(&g, &grp, &fresh, stub_now));
+  CHECK(!groups_includes_group(&g, &grp, &old, stub_now));
+
+  groups_deinit(&g);
+}
+
 static void test_overdue_timer_not_postponed(void) {
   setup();
   struct in6_addr g1 = addr("ff05::aa");
@@ -792,6 +830,8 @@ int main(void) {
   test_ssm_ignores_exclude_and_legacy();
   test_ssm_source_overflow_rejects_whole_record();
   test_ssm_source_overflow_preserves_existing_state();
+  test_ssm_preflight_ignores_expired_sources();
+  test_ssm_preflight_purges_pending_source_past_cap();
   test_overdue_timer_not_postponed();
   test_repeated_block_sends_immediate_query_keeps_counter();
   test_repeated_to_in_restarts_group_query_sequence();
