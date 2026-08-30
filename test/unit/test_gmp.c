@@ -1,4 +1,6 @@
 #include <arpa/inet.h>
+#include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 
@@ -12,6 +14,18 @@
 static struct querier_iface q;
 
 static _Alignas(16) uint8_t pkt[2048];
+static bool fail_calloc;
+
+void* __real_calloc(size_t count, size_t size);
+
+void* __wrap_calloc(size_t count, size_t size) {
+  if (fail_calloc) {
+    fail_calloc = false;
+    errno = ENOMEM;
+    return NULL;
+  }
+  return __real_calloc(count, size);
+}
 
 static struct in6_addr addr(const char* s) {
   struct in6_addr a;
@@ -441,6 +455,44 @@ static void test_checksum_carry_folding(void) {
   CHECK(gmp_checksum(data, sizeof(data)) == 0);
 }
 
+static void reset_attach_stubs(void) {
+  stub_mrib_attach_error = 0;
+  stub_mrib_attach_calls = 0;
+  stub_mrib_detach_calls = 0;
+  stub_timer_set_calls = 0;
+}
+
+static void test_querier_attach_allocation_failure(void) {
+  struct querier querier;
+  struct querier_user_iface user = {0};
+  querier_init(&querier);
+  reset_attach_stubs();
+  fail_calloc = true;
+
+  CHECK(querier_attach(&user, &querier, 7, NULL) == -ENOMEM);
+  CHECK(user.iface == NULL);
+  CHECK(list_empty(&querier.ifaces));
+  CHECK(stub_mrib_attach_calls == 0);
+  CHECK(stub_timer_set_calls == 0);
+  querier_deinit(&querier);
+}
+
+static void test_querier_attach_mrib_failure(void) {
+  struct querier querier;
+  struct querier_user_iface user = {0};
+  querier_init(&querier);
+  reset_attach_stubs();
+  stub_mrib_attach_error = -ENODEV;
+
+  CHECK(querier_attach(&user, &querier, 7, NULL) == -ENODEV);
+  CHECK(user.iface == NULL);
+  CHECK(list_empty(&querier.ifaces));
+  CHECK(stub_mrib_attach_calls == 1);
+  CHECK(stub_mrib_detach_calls == 0);
+  CHECK(stub_timer_set_calls == 0);
+  querier_deinit(&querier);
+}
+
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
   test_float8_codec();
@@ -448,6 +500,8 @@ int main(void) {
   test_checksum_even_length_self_verifies();
   test_checksum_odd_length_self_verifies();
   test_checksum_carry_folding();
+  test_querier_attach_allocation_failure();
+  test_querier_attach_mrib_failure();
   test_igmp_report_exclude();
   test_igmp_report_include_sources();
   test_igmp_report_truncated();

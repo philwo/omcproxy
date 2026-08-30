@@ -82,6 +82,7 @@ add_executable(test_gmp
 )
 target_include_directories(test_gmp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(test_gmp PRIVATE omcproxy_build omcproxy_warnings)
+target_link_options(test_gmp PRIVATE -Wl,--wrap=calloc)
 add_test(NAME gmp COMMAND test_gmp)
 
 if(OMCPROXY_FUZZ)

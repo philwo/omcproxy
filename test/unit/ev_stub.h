@@ -9,5 +9,6 @@
 extern omgp_time_t stub_now;
 extern struct ev_fd* stub_fds[STUB_MAX_FDS];
 extern size_t stub_fd_count;
+extern size_t stub_timer_set_calls;
 
 void stub_advance(omgp_time_t delta);

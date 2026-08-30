@@ -147,13 +147,10 @@ int querier_attach(struct querier_user_iface* user,
     }
   }
 
-  omgp_time_t now = omgp_time();
-  int res = 0;
   if (!iface) {
     iface = calloc(1, sizeof(*iface));
     if (!iface) {
-      res = -errno;
-      goto out;
+      return -ENOMEM;
     }
 
     list_add(&iface->head, &ifaces);
@@ -161,7 +158,6 @@ int querier_attach(struct querier_user_iface* user,
 
     iface->ifindex = ifindex;
     iface->timeout.cb = querier_iface_timer;
-    ev_timer_set(&iface->timeout, 0);
 
     groups_init(&iface->groups);
     iface->groups.source_limit = QUERIER_MAX_SOURCE;
@@ -172,32 +168,33 @@ int querier_attach(struct querier_user_iface* user,
     iface->proto[GMP_IGMP].startup_tries = iface->groups.cfg_v4.robustness;
     iface->proto[GMP_MLD].startup_tries = iface->groups.cfg_v6.robustness;
 
-    res = mrib_attach_querier(&iface->mrib, ifindex, igmp_handle, mld_handle);
+    int res =
+        mrib_attach_querier(&iface->mrib, ifindex, igmp_handle, mld_handle);
     if (res) {
-      goto out;
+      groups_deinit(&iface->groups);
+      list_del(&iface->head);
+      free(iface);
+      return res;
     }
+
+    ev_timer_set(&iface->timeout, 0);
   }
 
-out:
-  if (iface) {
-    list_add(&user->head, &iface->users);
-    user->iface = iface;
+  list_add(&user->head, &iface->users);
+  user->iface = iface;
 
-    list_add(&user->user.head, &querier->ifaces);
-    user->user_cb = cb;
-    user->user.querier = querier;
-    user->user.groups = &iface->groups;
+  list_add(&user->user.head, &querier->ifaces);
+  user->user_cb = cb;
+  user->user.querier = querier;
+  user->user.groups = &iface->groups;
 
-    struct group* group;
-    groups_for_each_group (group, &iface->groups) {
-      querier_announce_iface(user, now, group, true);
-    }
+  omgp_time_t now = omgp_time();
+  struct group* group;
+  groups_for_each_group (group, &iface->groups) {
+    querier_announce_iface(user, now, group, true);
   }
 
-  if (res) {
-    querier_detach(user);
-  }
-  return res;
+  return 0;
 }
 
 // Detach an interface from a querier-instance
