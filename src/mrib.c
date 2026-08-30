@@ -270,12 +270,6 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
     }
   }
 
-  if (iface->route_count >= MRIB_MAX_IFACE_ROUTES) {
-    mrib_evict_route(iface);
-  } else if (mrib_route_count >= MRIB_MAX_ROUTES) {
-    mrib_evict_globally_oldest();
-  }
-
   struct mrib_route* route = malloc(sizeof(*route));
   if (!route) {
     return;
@@ -298,6 +292,12 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
   list_add_tail(&route->head, &iface->routes);
   ++iface->route_count;
   ++mrib_route_count;
+
+  if (iface->route_count > MRIB_MAX_IFACE_ROUTES) {
+    mrib_evict_route(iface);
+  } else if (mrib_route_count > MRIB_MAX_ROUTES) {
+    mrib_evict_globally_oldest();
+  }
 }
 
 // Test if an interface can be the parent of routes (i.e. is a proxy uplink)

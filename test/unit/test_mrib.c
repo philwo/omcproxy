@@ -617,6 +617,33 @@ static void test_iface_route_cap_evicts_oldest(void) {
   teardown();
 }
 
+static void test_cap_admission_failure_keeps_existing_routes(void) {
+  setup();
+  struct in6_addr group = addr6("::ffff:239.67.67.67");
+  struct in6_addr cand_group = addr6("::ffff:239.67.67.68");
+  struct in6_addr cand_source = addr6("::ffff:10.99.0.1");
+  struct in6_addr oldest = flow_source(0);
+
+  inject_flood(1, "239.67.67.67", 0, MRIB_MAX_IFACE_ROUTES);
+  CHECK(mfc_count() == MRIB_MAX_IFACE_ROUTES);
+
+  add_mfc_fail_count = 1;
+  inject_mrt(IGMPMSG_NOCACHE, 1, "10.99.0.1", "239.67.67.68");
+  CHECK(mfc_count() == MRIB_MAX_IFACE_ROUTES);
+  CHECK(mfc_find(&group, &oldest) != NULL);
+  CHECK(mfc_find(&cand_group, &cand_source) == NULL);
+
+  inject_mrt(IGMPMSG_NOCACHE, 1, "10.99.0.1", "239.67.67.68");
+  CHECK(mfc_count() == MRIB_MAX_IFACE_ROUTES);
+  CHECK(mfc_find(&group, &oldest) == NULL);
+  CHECK(mfc_find(&cand_group, &cand_source) != NULL);
+
+  stub_advance((MRIB_DEFAULT_LIFETIME + 1) * OMGP_TIME_PER_SECOND);
+  CHECK(mfc_count() == 0);
+
+  teardown();
+}
+
 static void test_global_route_cap_evicts_globally_oldest(void) {
   setup();
   CHECK(mrib_attach_user(&uplink2, 102, uplink_newsource) == 0);
@@ -657,6 +684,7 @@ int main(void) {
   test_wrongmif_from_uplink_reparents_ipv6();
   test_refresh_reconciles_output_interfaces();
   test_iface_route_cap_evicts_oldest();
+  test_cap_admission_failure_keeps_existing_routes();
   test_global_route_cap_evicts_globally_oldest();
   return test_result();
 }
