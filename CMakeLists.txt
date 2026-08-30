@@ -35,6 +35,7 @@ find_library(libubox ubox REQUIRED)
 
 add_library(omcproxy_core OBJECT
   src/client.c
+  src/ev.c
   src/groups.c
   src/igmp.c
   src/mld.c
@@ -48,3 +49,6 @@ add_executable(omcproxy src/omcproxy.c)
 target_link_libraries(omcproxy PRIVATE omcproxy_build omcproxy_warnings omcproxy_core ${libubox})
 
 install(TARGETS omcproxy DESTINATION sbin)
+
+enable_testing()
+add_subdirectory(test)

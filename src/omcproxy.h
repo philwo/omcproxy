@@ -47,12 +47,7 @@ typedef int64_t omgp_time_t;
 #define OMGP_TIME_MAX INT64_MAX
 #define OMGP_TIME_PER_SECOND INT64_C(1000)
 
-static inline omgp_time_t omgp_time(void) {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return ((omgp_time_t)ts.tv_sec * OMGP_TIME_PER_SECOND) +
-         ((omgp_time_t)ts.tv_nsec / (1000000000 / OMGP_TIME_PER_SECOND));
-}
+omgp_time_t omgp_time(void);
 
 // Logging macros
 #ifndef L_LEVEL
