@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include "addr.h"
 
 // Remove a source-definition for a group
 static void groups_remove_source(struct group* group,
@@ -307,8 +308,8 @@ void groups_update_timers(struct groups* groups,
                           const struct in6_addr* groupaddr,
                           const struct in6_addr* addrs,
                           size_t len) {
-  char addrbuf[INET6_ADDRSTRLEN];
-  inet_ntop(AF_INET6, groupaddr, addrbuf, sizeof(addrbuf));
+  char addrbuf[ADDR_BUFLEN];
+  addr_ntop(addrbuf, sizeof(addrbuf), groupaddr);
   struct group* group = groups_get_group(groups, groupaddr, NULL);
   if (!group) {
     L_WARN("%s: failed to update timer: no such group %s", __FUNCTION__,
@@ -353,8 +354,8 @@ void groups_update_state(struct groups* groups,
                          enum groups_update update) {
   bool created = false;
   bool changed = false;
-  char addrbuf[INET6_ADDRSTRLEN];
-  inet_ntop(AF_INET6, groupaddr, addrbuf, sizeof(addrbuf));
+  char addrbuf[ADDR_BUFLEN];
+  addr_ntop(addrbuf, sizeof(addrbuf), groupaddr);
   L_DEBUG("%s: %s (+%d sources) => %d", __FUNCTION__, addrbuf, (int)len,
           update);
 

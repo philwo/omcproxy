@@ -9,6 +9,14 @@ target_include_directories(test_config PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(test_config PRIVATE omcproxy_build omcproxy_warnings)
 add_test(NAME config COMMAND test_config)
 
+add_executable(test_addr
+  unit/test_addr.c
+  ${CMAKE_SOURCE_DIR}/src/addr.c
+)
+target_include_directories(test_addr PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+target_link_libraries(test_addr PRIVATE omcproxy_build omcproxy_warnings)
+add_test(NAME addr COMMAND test_addr)
+
 add_executable(test_ev
   unit/test_ev.c
   ${CMAKE_SOURCE_DIR}/src/ev.c
@@ -20,6 +28,7 @@ add_test(NAME ev COMMAND test_ev)
 add_executable(test_groups
   unit/test_groups.c
   unit/ev_stub.c
+  ${CMAKE_SOURCE_DIR}/src/addr.c
   ${CMAKE_SOURCE_DIR}/src/groups.c
 )
 target_include_directories(test_groups PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
@@ -30,6 +39,7 @@ add_executable(test_gmp
   unit/test_gmp.c
   unit/ev_stub.c
   unit/mrib_stub.c
+  ${CMAKE_SOURCE_DIR}/src/addr.c
   ${CMAKE_SOURCE_DIR}/src/groups.c
   ${CMAKE_SOURCE_DIR}/src/igmp.c
   ${CMAKE_SOURCE_DIR}/src/mld.c
@@ -44,6 +54,7 @@ if(OMCPROXY_FUZZ)
     fuzz/fuzz_gmp.c
     unit/ev_stub.c
     unit/mrib_stub.c
+    ${CMAKE_SOURCE_DIR}/src/addr.c
     ${CMAKE_SOURCE_DIR}/src/groups.c
     ${CMAKE_SOURCE_DIR}/src/igmp.c
     ${CMAKE_SOURCE_DIR}/src/mld.c

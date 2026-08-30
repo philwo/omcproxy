@@ -31,6 +31,7 @@
 #include <netinet/ip6.h>
 #include <unistd.h>
 
+#include "addr.h"
 #include "mrib.h"
 #include "querier.h"
 
@@ -83,9 +84,9 @@ void mld_handle(struct mrib_querier* mrib,
                 const struct mld_hdr* hdr,
                 size_t len,
                 const struct sockaddr_in6* from) {
-  char addrbuf[INET_ADDRSTRLEN];
+  char addrbuf[ADDR_BUFLEN];
   omgp_time_t now = omgp_time();
-  inet_ntop(AF_INET6, &hdr->mld_addr, addrbuf, sizeof(addrbuf));
+  const char* addrstr = addr_ntop(addrbuf, sizeof(addrbuf), &hdr->mld_addr);
 
   struct querier_iface* q = container_of(mrib, struct querier_iface, mrib);
   if (hdr->mld_icmp6_hdr.icmp6_type == ICMPV6_MGM_QUERY) {
@@ -140,7 +141,7 @@ void mld_handle(struct mrib_querier* mrib,
 
     int election = memcmp(&from->sin6_addr, &addr, sizeof(from->sin6_addr));
     L_INFO("%s: detected other querier %s with priority %d on %d", __FUNCTION__,
-           addrbuf, election, q->ifindex);
+           addrstr, election, q->ifindex);
 
     // TODO: we ignore MLDv1 queriers for now, since a lot of them are dumb
     // switches

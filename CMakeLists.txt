@@ -35,6 +35,7 @@ endif()
 
 
 add_library(omcproxy_core OBJECT
+  src/addr.c
   src/client.c
   src/config.c
   src/ev.c

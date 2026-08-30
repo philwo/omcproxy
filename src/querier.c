@@ -23,6 +23,7 @@
 #include <string.h>
 #include "list.h"
 
+#include "addr.h"
 #include "querier.h"
 
 static struct list_head ifaces = LIST_HEAD_INIT(ifaces);
@@ -75,8 +76,8 @@ static void querier_send_query(struct groups* groups,
                                bool suppress) {
   struct querier_iface* iface =
       container_of(groups, struct querier_iface, groups);
-  char addrbuf[INET6_ADDRSTRLEN] = "::";
-  inet_ntop(AF_INET6, group, addrbuf, sizeof(addrbuf));
+  char addrbuf[ADDR_BUFLEN];
+  addr_ntop(addrbuf, sizeof(addrbuf), group);
 
   L_DEBUG("%s: sending %s-specific query for %s on %d (S: %d)", __FUNCTION__,
           (!sources) ? "group" : "source", addrbuf, iface->ifindex, suppress);
