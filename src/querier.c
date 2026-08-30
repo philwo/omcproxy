@@ -107,11 +107,11 @@ static void querier_iface_timer(struct ev_timer* timeout) {
         p->other_querier = false;
       }
 
-      gmp_send_query(iface, family, NULL, NULL, false);
+      int sent = gmp_send_query(iface, family, NULL, NULL, false);
       L_DEBUG("%s: sending generic %s-query on %d (S: 0)", __FUNCTION__,
               (family == GMP_MLD) ? "MLD" : "IGMP", iface->ifindex);
 
-      if (p->startup_tries > 0) {
+      if (sent == 0 && p->startup_tries > 0) {
         --p->startup_tries;
       }
 

@@ -56,6 +56,7 @@ static void setup(void) {
   q.cfg = q.groups.cfg_v6;
   stub_igmp_source.s_addr = addr4("192.168.1.1");
   stub_mld_source = addr("fe80::1");
+  stub_mrib_attach_error = 0;
   stub_sent_len = 0;
   stub_sent_family = 0;
 }
@@ -803,6 +804,39 @@ static void test_querier_attach_mrib_failure(void) {
   querier_deinit(&querier);
 }
 
+static void test_startup_tries_kept_after_send_failure(void) {
+  struct querier querier;
+  struct querier_user_iface user = {.user_cb = NULL};
+  stub_igmp_source.s_addr = addr4("192.168.1.1");
+  stub_mld_source = addr("fe80::1");
+  stub_mrib_attach_error = 0;
+  stub_send_result = -1;
+  stub_send_count = 0;
+
+  CHECK(querier_init(&querier) == 0);
+  CHECK(querier_attach(&user, &querier, 9, NULL) == 0);
+  struct querier_iface* iface = user.iface;
+
+  stub_advance(0);
+  CHECK(stub_send_count == 2);
+  CHECK(ev_timer_remaining(&iface->timeout) == 125000 / 4);
+
+  stub_advance(125000 / 4);
+  CHECK(stub_send_count == 4);
+  CHECK(ev_timer_remaining(&iface->timeout) == 125000 / 4);
+
+  stub_send_result = 0;
+  stub_advance(125000 / 4);
+  CHECK(stub_send_count == 6);
+  CHECK(ev_timer_remaining(&iface->timeout) == 125000 / 4);
+
+  stub_advance(125000 / 4);
+  CHECK(stub_send_count == 8);
+  CHECK(ev_timer_remaining(&iface->timeout) == 125000);
+
+  querier_detach(&user);
+}
+
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
   test_float8_codec();
@@ -815,6 +849,7 @@ int main(void) {
   test_checksum_carry_folding();
   test_querier_attach_allocation_failure();
   test_querier_attach_mrib_failure();
+  test_startup_tries_kept_after_send_failure();
   test_igmp_report_exclude();
   test_igmp_report_include_sources();
   test_igmp_report_truncated();

@@ -8,6 +8,8 @@ struct in6_addr stub_mld_source;
 uint8_t stub_sent[2048];
 size_t stub_sent_len;
 int stub_sent_family;
+int stub_send_result;
+int stub_send_count;
 int stub_mrib_attach_error;
 size_t stub_mrib_attach_calls;
 size_t stub_mrib_detach_calls;
@@ -50,13 +52,14 @@ int mrib_send_igmp(struct mrib_querier* querier,
                    const struct sockaddr_in* dest) {
   (void)querier;
   (void)dest;
+  ++stub_send_count;
   if (len > sizeof(stub_sent)) {
     return -1;
   }
   memcpy(stub_sent, igmp, len);
   stub_sent_len = len;
   stub_sent_family = 4;
-  return 0;
+  return stub_send_result;
 }
 
 int mrib_send_mld(struct mrib_querier* querier,
@@ -65,11 +68,12 @@ int mrib_send_mld(struct mrib_querier* querier,
                   const struct sockaddr_in6* dest) {
   (void)querier;
   (void)dest;
+  ++stub_send_count;
   if (len > sizeof(stub_sent)) {
     return -1;
   }
   memcpy(stub_sent, mld, len);
   stub_sent_len = len;
   stub_sent_family = 6;
-  return 0;
+  return stub_send_result;
 }
