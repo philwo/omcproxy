@@ -9,6 +9,14 @@ target_include_directories(test_config PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(test_config PRIVATE omcproxy_build omcproxy_warnings)
 add_test(NAME config COMMAND test_config)
 
+add_executable(test_ev
+  unit/test_ev.c
+  ${CMAKE_SOURCE_DIR}/src/ev.c
+)
+target_include_directories(test_ev PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+target_link_libraries(test_ev PRIVATE omcproxy_build omcproxy_warnings)
+add_test(NAME ev COMMAND test_ev)
+
 add_executable(test_groups
   unit/test_groups.c
   unit/ev_stub.c
