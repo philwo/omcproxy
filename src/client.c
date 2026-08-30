@@ -244,15 +244,19 @@ static void client_reschedule(struct client* client) {
     return;
   }
 
-  ev_timer_set(&client->retry, client->backoff);
-  if (client->backoff < CLIENT_RETRY_MAX) {
-    client->backoff *= 2;
+  if (client->retry.pending) {
+    return;
   }
+
+  ev_timer_set(&client->retry, client->backoff);
 }
 
 // Reapply memberships whose kernel state diverges (called by timer)
 static void client_retry(struct ev_timer* t) {
   struct client* client = container_of(t, struct client, retry);
+  if (client->backoff < CLIENT_RETRY_MAX) {
+    client->backoff *= 2;
+  }
 
   struct client_membership* m;
   struct client_membership* n;
