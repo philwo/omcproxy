@@ -36,17 +36,32 @@
     {
       "name": "default",
       "configurePreset": "default",
-      "output": { "outputOnFailure": true }
+      "output": { "outputOnFailure": true },
+      "filter": { "exclude": { "label": "netns" } }
     },
     {
       "name": "ci",
       "configurePreset": "ci",
-      "output": { "outputOnFailure": true }
+      "output": { "outputOnFailure": true },
+      "filter": { "exclude": { "label": "netns" } }
     },
     {
       "name": "asan",
       "configurePreset": "asan",
-      "output": { "outputOnFailure": true }
+      "output": { "outputOnFailure": true },
+      "filter": { "exclude": { "label": "netns" } }
+    },
+    {
+      "name": "netns",
+      "configurePreset": "default",
+      "output": { "outputOnFailure": true },
+      "filter": { "include": { "label": "netns" } }
+    },
+    {
+      "name": "netns-asan",
+      "configurePreset": "asan",
+      "output": { "outputOnFailure": true },
+      "filter": { "include": { "label": "netns" } }
     }
   ]
 }
