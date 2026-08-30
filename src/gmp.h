@@ -25,7 +25,12 @@ enum gmp_family {
   GMP_MLD = 1,
 };
 
+#define MLDV2_LISTENER_REPORT 143
+
 uint16_t gmp_checksum(const void* data, size_t len);
+
+bool gmp_ipv4_router_alert(const uint8_t* opts, size_t len);
+bool gmp_ipv6_router_alert(const uint8_t* hbh, size_t len);
 
 int gmp_float8_decode(uint8_t value);
 uint8_t gmp_float8_encode(int value);

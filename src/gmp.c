@@ -96,6 +96,64 @@ uint16_t gmp_float16_encode(int value) {
   return (uint16_t)gmp_float_encode(value, 0x8000, 12, 0xfff);
 }
 
+bool gmp_ipv4_router_alert(const uint8_t* opts, size_t len) {
+  size_t i = 0;
+  while (i < len) {
+    uint8_t type = opts[i];
+    if (type == 0) {
+      break;
+    }
+    if (type == 1) {
+      ++i;
+      continue;
+    }
+    if (i + 1 >= len) {
+      break;
+    }
+    uint8_t olen = opts[i + 1];
+    if (olen < 2 || i + olen > len) {
+      break;
+    }
+    if (type == 0x94 && olen == 4 && opts[i + 2] == 0 && opts[i + 3] == 0) {
+      return true;
+    }
+    i += olen;
+  }
+  return false;
+}
+
+bool gmp_ipv6_router_alert(const uint8_t* hbh, size_t len) {
+  if (len < 2) {
+    return false;
+  }
+
+  size_t hlen = ((size_t)hbh[1] + 1) * 8;
+  if (hlen < len) {
+    len = hlen;
+  }
+
+  size_t i = 2;
+  while (i < len) {
+    uint8_t type = hbh[i];
+    if (type == 0) {
+      ++i;
+      continue;
+    }
+    if (i + 1 >= len) {
+      break;
+    }
+    uint8_t olen = hbh[i + 1];
+    if (i + 2 + olen > len) {
+      break;
+    }
+    if (type == 0x05 && olen == 2 && hbh[i + 2] == 0 && hbh[i + 3] == 0) {
+      return true;
+    }
+    i += 2 + (size_t)olen;
+  }
+  return false;
+}
+
 struct mld_query {
   struct mld_hdr mld;
   uint8_t s_qrv;
@@ -179,7 +237,7 @@ static ssize_t gmp_handle_record(struct groups* groups,
       gmp_load_addr(family, &sources[i], &data[hdrlen + i * alen]);
     }
 
-    groups_update_state(groups, &addr, sources, nsrc, type);
+    groups_update_state(groups, &addr, nsrc ? sources : NULL, nsrc, type);
   }
 
   return (ssize_t)read;

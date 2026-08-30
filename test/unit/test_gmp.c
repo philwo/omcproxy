@@ -337,6 +337,50 @@ static void test_mld_report_truncated(void) {
   teardown();
 }
 
+static void test_igmp_report_aux_data_skipped(void) {
+  setup();
+  struct in6_addr g1;
+  struct in6_addr g2;
+  addr_map(&g1, addr4("239.11.11.11"));
+  addr_map(&g2, addr4("239.22.22.22"));
+
+  memset(pkt, 0, 64);
+  pkt[0] = 0x22;
+  pkt[7] = 2;
+  pkt[8] = UPDATE_IS_EXCLUDE;
+  pkt[9] = 1;
+  in_addr_t a = addr4("239.11.11.11");
+  memcpy(&pkt[12], &a, 4);
+  pkt[20] = UPDATE_IS_EXCLUDE;
+  a = addr4("239.22.22.22");
+  memcpy(&pkt[24], &a, 4);
+  igmp_input(8 + 12 + 8);
+  CHECK(groups_get(&q.groups, &g1) != NULL);
+  CHECK(groups_get(&q.groups, &g2) != NULL);
+
+  teardown();
+}
+
+static void test_mld_report_aux_data_skipped(void) {
+  setup();
+  struct in6_addr g1 = addr("ff05::a1");
+  struct in6_addr g2 = addr("ff05::a2");
+
+  memset(pkt, 0, 64);
+  pkt[0] = 143;
+  pkt[7] = 2;
+  pkt[8] = UPDATE_IS_EXCLUDE;
+  pkt[9] = 1;
+  memcpy(&pkt[12], &g1, 16);
+  pkt[32] = UPDATE_IS_EXCLUDE;
+  memcpy(&pkt[36], &g2, 16);
+  mld_input(8 + 24 + 20);
+  CHECK(groups_get(&q.groups, &g1) != NULL);
+  CHECK(groups_get(&q.groups, &g2) != NULL);
+
+  teardown();
+}
+
 static void test_mld_v1_report_and_done(void) {
   setup();
   struct in6_addr grp = addr("ff05::5555");
@@ -435,6 +479,56 @@ static void test_float16_codec(void) {
   }
 }
 
+static void test_ipv4_router_alert_walk(void) {
+  uint8_t ra[] = {0x94, 0x04, 0x00, 0x00};
+  CHECK(gmp_ipv4_router_alert(ra, sizeof(ra)));
+
+  uint8_t nop_ra[] = {0x01, 0x94, 0x04, 0x00, 0x00};
+  CHECK(gmp_ipv4_router_alert(nop_ra, sizeof(nop_ra)));
+
+  uint8_t other_then_ra[] = {0x07, 0x03, 0x04, 0x94, 0x04, 0x00, 0x00, 0x00};
+  CHECK(gmp_ipv4_router_alert(other_then_ra, sizeof(other_then_ra)));
+
+  uint8_t end[] = {0x00, 0x94, 0x04, 0x00, 0x00};
+  CHECK(!gmp_ipv4_router_alert(end, sizeof(end)));
+
+  uint8_t bad_len[] = {0x07, 0x00, 0x94, 0x04, 0x00, 0x00};
+  CHECK(!gmp_ipv4_router_alert(bad_len, sizeof(bad_len)));
+
+  CHECK(!gmp_ipv4_router_alert(NULL, 0));
+
+  uint8_t truncated[] = {0x94, 0x04, 0x00};
+  CHECK(!gmp_ipv4_router_alert(truncated, sizeof(truncated)));
+
+  uint8_t nonzero_value[] = {0x94, 0x04, 0x00, 0x01};
+  CHECK(!gmp_ipv4_router_alert(nonzero_value, sizeof(nonzero_value)));
+}
+
+static void test_ipv6_router_alert_walk(void) {
+  uint8_t ra[] = {0x00, 0x00, 0x05, 0x02, 0x00, 0x00, 0x01, 0x00};
+  CHECK(gmp_ipv6_router_alert(ra, sizeof(ra)));
+
+  uint8_t pad1_ra[] = {0x00, 0x00, 0x00, 0x05, 0x02, 0x00, 0x00, 0x00};
+  CHECK(gmp_ipv6_router_alert(pad1_ra, sizeof(pad1_ra)));
+
+  uint8_t wrong_value[] = {0x00, 0x00, 0x05, 0x02, 0x00, 0x01, 0x01, 0x00};
+  CHECK(!gmp_ipv6_router_alert(wrong_value, sizeof(wrong_value)));
+
+  uint8_t embedded[] = {0x00, 0x00, 0x1e, 0x04, 0x05, 0x02, 0x00, 0x00};
+  CHECK(!gmp_ipv6_router_alert(embedded, sizeof(embedded)));
+
+  uint8_t none[] = {0x00, 0x00, 0x01, 0x04, 0x00, 0x00, 0x00, 0x00};
+  CHECK(!gmp_ipv6_router_alert(none, sizeof(none)));
+
+  CHECK(!gmp_ipv6_router_alert(NULL, 0));
+}
+
+static void test_mrib_filter_bits(void) {
+  CHECK(mrib_filter_bit(0) == UINT32_C(1));
+  CHECK(mrib_filter_bit(31) == UINT32_C(0x80000000));
+  CHECK(MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND == 125000);
+}
+
 static void test_checksum_even_length_self_verifies(void) {
   uint8_t query[12] = {0x11, 0x64};
   uint16_t csum = gmp_checksum(query, sizeof(query));
@@ -498,6 +592,9 @@ int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
   test_float8_codec();
   test_float16_codec();
+  test_ipv4_router_alert_walk();
+  test_ipv6_router_alert_walk();
+  test_mrib_filter_bits();
   test_checksum_even_length_self_verifies();
   test_checksum_odd_length_self_verifies();
   test_checksum_carry_folding();
@@ -514,6 +611,8 @@ int main(void) {
   test_mld_report_exclude();
   test_mld_report_include_sources();
   test_mld_report_truncated();
+  test_igmp_report_aux_data_skipped();
+  test_mld_report_aux_data_skipped();
   test_mld_v1_report_and_done();
   test_mld_query_updates_source_timers();
   test_mld_query_suppress_respected();

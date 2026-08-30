@@ -356,8 +356,8 @@ static void mrib_receive_mrt(struct ev_fd* fd,
         continue;
       }
 
-      uint32_t* opts = (uint32_t*)&iph[1];
-      bool alert = (void*)&opts[1] <= (void*)igmp && *opts == ipv4_rtr_alert;
+      bool alert = gmp_ipv4_router_alert((const uint8_t*)&iph[1],
+                                         (size_t)iph->ihl * 4 - sizeof(*iph));
       if (!alert && (igmp->type != IGMP_HOST_MEMBERSHIP_QUERY ||
                      (size_t)len > sizeof(*igmp))) {
         L_WARN("%s: ignoring invalid IGMP-message of type %x from %s on %d",
@@ -444,10 +444,9 @@ static void mrib_receive_mrt6(struct ev_fd* fd,
           memcpy(&hlim, CMSG_DATA(ch), sizeof(hlim));
         } else if (ch->cmsg_level == IPPROTO_IPV6 &&
                    ch->cmsg_type == IPV6_HOPOPTS &&
-                   ch->cmsg_len >= CMSG_LEN(sizeof(ipv6_rtr_alert)) &&
-                   memmem(CMSG_DATA(ch), ch->cmsg_len - CMSG_LEN(0),
-                          &ipv6_rtr_alert.rt, sizeof(ipv6_rtr_alert.rt))) {
-          alert = true;  // FIXME: memmem is wrong
+                   gmp_ipv6_router_alert(CMSG_DATA(ch),
+                                         ch->cmsg_len - CMSG_LEN(0))) {
+          alert = true;
         }
       }
       inet_ntop(AF_INET6, &from.sin6_addr, addrbuf, sizeof(addrbuf));
