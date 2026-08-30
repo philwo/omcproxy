@@ -264,7 +264,7 @@ static void test_other_querier_timer_update(void) {
   struct in6_addr grp = addr("ff05::77");
 
   groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
-  groups_update_timers(&g, &grp, NULL, 0);
+  groups_update_timers(&g, &grp, NULL, 0, OMGP_TIME_PER_SECOND, 2);
 
   stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(groups_get(&g, &grp) != NULL);

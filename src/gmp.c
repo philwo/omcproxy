@@ -266,7 +266,7 @@ static void gmp_update_query_timers(struct querier_iface* q,
                                     enum gmp_family family,
                                     const struct gmp_query* p) {
   if (p->nsrc == 0) {
-    groups_update_timers(&q->groups, &p->group, NULL, 0);
+    groups_update_timers(&q->groups, &p->group, NULL, 0, p->mrd, p->robustness);
     return;
   }
 
@@ -282,7 +282,8 @@ static void gmp_update_query_timers(struct querier_iface* q,
       gmp_load_addr(family, &sources[i],
                     &p->sources[(offset + i) * address_length]);
     }
-    groups_update_timers(&q->groups, &p->group, sources, count);
+    groups_update_timers(&q->groups, &p->group, sources, count, p->mrd,
+                         p->robustness);
     offset += count;
   }
 }

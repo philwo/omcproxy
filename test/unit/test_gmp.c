@@ -260,6 +260,9 @@ static void test_igmp_query_updates_source_timers(void) {
 
   igmp_input(build_igmp_query(pkt, addr4("232.7.7.7"), srcs, 1, false));
   stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&q.groups, &grp) != NULL);
+
+  stub_advance(18 * OMGP_TIME_PER_SECOND);
   CHECK(groups_get(&q.groups, &grp) == NULL);
 
   teardown();
@@ -434,6 +437,26 @@ static void test_mld_query_suppress_respected(void) {
   mld_input(build_mld_query(pkt, &grp, NULL, 0, true));
   stub_advance(3 * OMGP_TIME_PER_SECOND);
   CHECK(groups_get(&q.groups, &grp) != NULL);
+
+  teardown();
+}
+
+static void test_mld_query_respects_received_mrc(void) {
+  setup();
+  struct in6_addr grp = addr("ff35::8000:77");
+  struct in6_addr srcs[1] = {addr("2001:db8::77")};
+
+  mld_input(build_mld_report(pkt, UPDATE_IS_INCLUDE, &grp, srcs, 1));
+  size_t len = build_mld_query(pkt, &grp, srcs, 1, false);
+  pkt[4] = 0x27;
+  pkt[5] = 0x10;
+  mld_input(len);
+
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&q.groups, &grp) != NULL);
+
+  stub_advance(18 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&q.groups, &grp) == NULL);
 
   teardown();
 }
@@ -808,6 +831,7 @@ int main(void) {
   test_mld_v1_report_and_done();
   test_mld_query_updates_source_timers();
   test_mld_query_suppress_respected();
+  test_mld_query_respects_received_mrc();
   test_mld_send_source_specific_query();
   test_igmp_specific_query_wins_election();
   test_mld_specific_query_wins_election();

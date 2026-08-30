@@ -313,39 +313,42 @@ void groups_update_config(struct groups* groups,
 void groups_update_timers(struct groups* groups,
                           const struct in6_addr* groupaddr,
                           const struct in6_addr* addrs,
-                          size_t len) {
+                          size_t len,
+                          omgp_time_t last_listener_query_interval,
+                          int last_listener_query_count) {
   char addrbuf[ADDR_BUFLEN];
   addr_ntop(addrbuf, sizeof(addrbuf), groupaddr);
   struct group* group = groups_get_group(groups, groupaddr, NULL);
   if (!group) {
-    L_WARN("%s: failed to update timer: no such group %s", __FUNCTION__,
-           addrbuf);
+    L_DEBUG("%s: no state for queried group %s", __FUNCTION__, addrbuf);
     return;
   }
 
-  struct groups_config* cfg =
-      IN6_IS_ADDR_V4MAPPED(&group->addr) ? &groups->cfg_v4 : &groups->cfg_v6;
   omgp_time_t now = omgp_time();
-  omgp_time_t llqt = now + (cfg->last_listener_query_count *
-                            cfg->last_listener_query_interval);
+  omgp_time_t llqt =
+      now + (last_listener_query_interval * last_listener_query_count);
 
   if (len == 0) {
     if (group->exclude_until > llqt) {
       group->exclude_until = llqt;
     }
   } else {
+    size_t unknown = 0;
     for (size_t i = 0; i < len; ++i) {
       struct group_source* source =
           groups_get_source(groups, group, &addrs[i], NULL);
       if (!source) {
-        L_WARN("%s: failed to update timer: unknown sources for group %s",
-               __FUNCTION__, addrbuf);
+        ++unknown;
         continue;
       }
 
       if (source->include_until > llqt) {
         source->include_until = llqt;
       }
+    }
+    if (unknown) {
+      L_DEBUG("%s: %d unknown sources queried for group %s", __FUNCTION__,
+              (int)unknown, addrbuf);
     }
   }
 
