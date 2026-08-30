@@ -103,6 +103,7 @@ int client_set(struct client* client,
 
 // Initialize client-instance
 int client_init(struct client* client, int ifindex) {
+  *client = (struct client){.igmp_fd = -1, .mld_fd = -1};
   client->igmp_fd = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
   if (client->igmp_fd < 0) {
     return -errno;
@@ -110,7 +111,10 @@ int client_init(struct client* client, int ifindex) {
 
   client->mld_fd = socket(AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, 0);
   if (client->mld_fd < 0) {
-    return -errno;
+    int err = -errno;
+    close(client->igmp_fd);
+    client->igmp_fd = -1;
+    return err;
   }
 
   client->ifindex = ifindex;
@@ -119,11 +123,11 @@ int client_init(struct client* client, int ifindex) {
 
 // Cleanup client-instance
 void client_deinit(struct client* client) {
-  if (client->ifindex) {
+  if (client->igmp_fd >= 0) {
     close(client->igmp_fd);
-    close(client->mld_fd);
-    client->igmp_fd = -1;
-    client->mld_fd = -1;
-    client->ifindex = 0;
   }
+  if (client->mld_fd >= 0) {
+    close(client->mld_fd);
+  }
+  *client = (struct client){.igmp_fd = -1, .mld_fd = -1};
 }
