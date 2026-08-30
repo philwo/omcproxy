@@ -342,6 +342,8 @@ static void test_group_query_attempt_kept_after_failure(void) {
   CHECK(query_calls == 2);
   stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(query_calls == 3);
+  CHECK(groups_get(&g, &grp) != NULL);
+  stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(groups_get(&g, &grp) == NULL);
 
   groups_deinit(&g);
@@ -404,6 +406,55 @@ static void test_skipped_source_query_cancels_schedule(void) {
   groups_deinit(&g);
 }
 
+static void test_overdue_group_membership_stays_active(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::b1");
+  struct in6_addr any_src = addr("2001:db8::b1");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  query_calls = 0;
+
+  stub_now += 3 * OMGP_TIME_PER_SECOND;
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+  CHECK(groups_includes_group(&g, &grp, &any_src, stub_now));
+
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 2);
+  CHECK(groups_get(&g, &grp) == NULL);
+  CHECK(update_included);
+
+  groups_deinit(&g);
+}
+
+static void test_overdue_source_membership_stays_active(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::b2");
+  struct in6_addr s1 = addr("2001:db8::b2");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  query_calls = 0;
+
+  stub_now += 3 * OMGP_TIME_PER_SECOND;
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 2);
+  CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  groups_deinit(&g);
+}
+
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
   test_asm_join_and_expiry();
@@ -423,5 +474,7 @@ int main(void) {
   test_source_query_attempt_kept_after_failure();
   test_skipped_group_query_cancels_schedule();
   test_skipped_source_query_cancels_schedule();
+  test_overdue_group_membership_stays_active();
+  test_overdue_source_membership_stays_active();
   return test_result();
 }

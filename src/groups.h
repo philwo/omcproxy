@@ -122,11 +122,17 @@ void groups_update_state(struct groups* groups,
 
 static inline bool group_is_included(const struct group* group,
                                      omgp_time_t time) {
+  if (group->retransmit > 0) {
+    return false;
+  }
   return group->exclude_until <= time;
 }
 
 static inline bool source_is_included(const struct group_source* source,
                                       omgp_time_t time) {
+  if (source->retransmit > 0) {
+    return true;
+  }
   return source->include_until > time;
 }
 
