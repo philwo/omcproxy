@@ -190,17 +190,17 @@ static void test_compat_mode_ignores_block(void) {
 static void test_source_overflow_falls_back_to_asm(void) {
   setup();
   g.source_limit = 2;
-  struct in6_addr group = addr("ff05::abcd");
-  struct in6_addr sources[2] = {addr("2001:db8::1"), addr("2001:db8::2")};
-  struct in6_addr third = addr("2001:db8::3");
+  struct in6_addr grp = addr("ff05::abcd");
+  struct in6_addr srcs[2] = {addr("2001:db8::1"), addr("2001:db8::2")};
+  struct in6_addr s3 = addr("2001:db8::3");
   struct in6_addr unrelated = addr("2001:db8::ee");
 
-  groups_update_state(&g, &group, sources, 2, UPDATE_IS_INCLUDE);
-  CHECK(!groups_includes_group(&g, &group, &unrelated, stub_now));
+  groups_update_state(&g, &grp, srcs, 2, UPDATE_IS_INCLUDE);
+  CHECK(!groups_includes_group(&g, &grp, &unrelated, stub_now));
 
-  groups_update_state(&g, &group, &third, 1, UPDATE_IS_INCLUDE);
-  CHECK(groups_includes_group(&g, &group, &unrelated, stub_now));
-  CHECK(groups_includes_group(&g, &group, &third, stub_now));
+  groups_update_state(&g, &grp, &s3, 1, UPDATE_IS_INCLUDE);
+  CHECK(groups_includes_group(&g, &grp, &unrelated, stub_now));
+  CHECK(groups_includes_group(&g, &grp, &s3, stub_now));
 
   groups_deinit(&g);
 }
@@ -208,31 +208,15 @@ static void test_source_overflow_falls_back_to_asm(void) {
 static void test_source_overflow_mid_update_falls_back_to_asm(void) {
   setup();
   g.source_limit = 2;
-  struct in6_addr group = addr("ff05::dcba");
-  struct in6_addr sources[2] = {addr("2001:db8::1"), addr("2001:db8::2")};
+  struct in6_addr grp = addr("ff05::dcba");
+  struct in6_addr srcs[2] = {addr("2001:db8::1"), addr("2001:db8::2")};
   struct in6_addr mixed[2] = {addr("2001:db8::1"), addr("2001:db8::3")};
   struct in6_addr unrelated = addr("2001:db8::ee");
 
-  groups_update_state(&g, &group, sources, 2, UPDATE_IS_INCLUDE);
-  groups_update_state(&g, &group, mixed, 2, UPDATE_TO_EX);
-  CHECK(groups_includes_group(&g, &group, &unrelated, stub_now));
+  groups_update_state(&g, &grp, srcs, 2, UPDATE_IS_INCLUDE);
+  groups_update_state(&g, &grp, mixed, 2, UPDATE_TO_EX);
+  CHECK(groups_includes_group(&g, &grp, &unrelated, stub_now));
   CHECK(update_source_count == 0);
-
-  groups_deinit(&g);
-}
-
-static void test_duplicate_sources_in_record(void) {
-  setup();
-  struct in6_addr grp = addr("ff05::d0d0");
-  struct in6_addr s1 = addr("2001:db8::1");
-  struct in6_addr dup[2] = {s1, s1};
-
-  groups_update_state(&g, &grp, &s1, 1, UPDATE_IS_INCLUDE);
-  groups_update_state(&g, &grp, dup, 2, UPDATE_IS_EXCLUDE);
-
-  const struct group* group = groups_get(&g, &grp);
-  CHECK(group != NULL && group->source_count == 1);
-  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
 
   groups_deinit(&g);
 }
@@ -345,6 +329,22 @@ static void test_ssm_preflight_purges_pending_source_past_cap(void) {
   groups_deinit(&g);
 }
 
+static void test_duplicate_sources_in_record(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::d0d0");
+  struct in6_addr s1 = addr("2001:db8::1");
+  struct in6_addr dup[2] = {s1, s1};
+
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_IS_INCLUDE);
+  groups_update_state(&g, &grp, dup, 2, UPDATE_IS_EXCLUDE);
+
+  const struct group* group = groups_get(&g, &grp);
+  CHECK(group != NULL && group->source_count == 1);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+
+  groups_deinit(&g);
+}
+
 static void test_overdue_timer_not_postponed(void) {
   setup();
   struct in6_addr g1 = addr("ff05::aa");
@@ -416,21 +416,21 @@ static void test_repeated_to_in_restarts_group_query_sequence(void) {
 static void test_group_limit_enforced(void) {
   setup();
   g.group_limit = 2;
-  struct in6_addr first = addr("ff05::1");
-  struct in6_addr second = addr("ff05::2");
-  struct in6_addr third = addr("ff05::3");
+  struct in6_addr g1 = addr("ff05::1");
+  struct in6_addr g2 = addr("ff05::2");
+  struct in6_addr g3 = addr("ff05::3");
 
-  groups_update_state(&g, &first, NULL, 0, UPDATE_IS_EXCLUDE);
-  groups_update_state(&g, &second, NULL, 0, UPDATE_IS_EXCLUDE);
-  groups_update_state(&g, &third, NULL, 0, UPDATE_IS_EXCLUDE);
-  CHECK(groups_get(&g, &first) != NULL);
-  CHECK(groups_get(&g, &second) != NULL);
-  CHECK(groups_get(&g, &third) == NULL);
+  groups_update_state(&g, &g1, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &g2, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &g3, NULL, 0, UPDATE_IS_EXCLUDE);
+  CHECK(groups_get(&g, &g1) != NULL);
+  CHECK(groups_get(&g, &g2) != NULL);
+  CHECK(groups_get(&g, &g3) == NULL);
 
   stub_advance(261 * OMGP_TIME_PER_SECOND);
-  CHECK(groups_get(&g, &first) == NULL);
-  groups_update_state(&g, &third, NULL, 0, UPDATE_IS_EXCLUDE);
-  CHECK(groups_get(&g, &third) != NULL);
+  CHECK(groups_get(&g, &g1) == NULL);
+  groups_update_state(&g, &g3, NULL, 0, UPDATE_IS_EXCLUDE);
+  CHECK(groups_get(&g, &g3) != NULL);
 
   groups_deinit(&g);
 }
@@ -450,7 +450,32 @@ static void test_other_querier_timer_update(void) {
   groups_deinit(&g);
 }
 
-static void test_group_query_attempt_kept_after_failure(void) {
+static void test_failed_group_query_retries_fail_open(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::f1");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  query_calls = 0;
+  query_result = GROUPS_QUERY_FAILED;
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 2);
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 3);
+  CHECK(groups_get(&g, &grp) != NULL);
+
+  stub_advance(256 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&g, &grp) != NULL);
+  stub_advance(2 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&g, &grp) == NULL);
+
+  groups_deinit(&g);
+}
+
+static void test_group_query_window_after_failed_attempt(void) {
   setup();
   struct in6_addr grp = addr("ff05::f2");
 
@@ -473,25 +498,7 @@ static void test_group_query_attempt_kept_after_failure(void) {
   groups_deinit(&g);
 }
 
-static void test_failed_group_queries_stop_at_natural_expiry(void) {
-  setup();
-  struct in6_addr grp = addr("ff05::f1");
-
-  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
-  query_calls = 0;
-  query_result = GROUPS_QUERY_FAILED;
-  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
-
-  stub_advance(258 * OMGP_TIME_PER_SECOND);
-  CHECK(query_calls > 3);
-  CHECK(groups_get(&g, &grp) != NULL);
-  stub_advance(2 * OMGP_TIME_PER_SECOND);
-  CHECK(groups_get(&g, &grp) == NULL);
-
-  groups_deinit(&g);
-}
-
-static void test_source_query_attempt_kept_after_failure(void) {
+static void test_source_query_window_after_failed_attempt(void) {
   setup();
   struct in6_addr grp = addr("ff05::f3");
   struct in6_addr s1 = addr("2001:db8::f3");
@@ -504,16 +511,21 @@ static void test_source_query_attempt_kept_after_failure(void) {
   stub_advance(0);
   CHECK(query_calls == 1);
   CHECK(query_source_count == 1);
+  CHECK(!query_suppress);
   query_result = GROUPS_QUERY_SENT;
   stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(query_calls == 2);
   stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(query_calls == 3);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
 
   groups_deinit(&g);
 }
 
-static void test_failed_source_queries_stop_at_natural_expiry(void) {
+static void test_failed_source_query_retries_fail_open(void) {
   setup();
   struct in6_addr grp = addr("ff05::f5");
   struct in6_addr s1 = addr("2001:db8::f5");
@@ -527,43 +539,148 @@ static void test_failed_source_queries_stop_at_natural_expiry(void) {
   CHECK(query_calls > 3);
   CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
 
-  stub_advance(160 * OMGP_TIME_PER_SECOND);
-  CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
+  stub_advance(161 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&g, &grp) == NULL);
 
   groups_deinit(&g);
 }
 
-static void test_skipped_group_query_cancels_schedule(void) {
+static void test_overdue_leave_dispatch_keeps_query_schedule(void) {
   setup();
-  struct in6_addr grp = addr("ff05::b3");
+  struct in6_addr grp = addr("ff05::f6");
 
   groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
-  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
   query_calls = 0;
-  query_result = GROUPS_QUERY_SKIPPED;
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
 
+  stub_now += 3 * OMGP_TIME_PER_SECOND;
   stub_advance(0);
   CHECK(query_calls == 1);
+  CHECK(groups_get(&g, &grp) != NULL);
   stub_advance(OMGP_TIME_PER_SECOND);
-  CHECK(query_calls == 1);
+  CHECK(query_calls == 2);
+  CHECK(groups_get(&g, &grp) != NULL);
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&g, &grp) == NULL);
 
   groups_deinit(&g);
 }
 
-static void test_skipped_source_query_cancels_schedule(void) {
+static void test_overdue_block_dispatch_keeps_query_schedule(void) {
   setup();
-  struct in6_addr grp = addr("ff05::b4");
-  struct in6_addr s1 = addr("2001:db8::b4");
+  struct in6_addr grp = addr("ff05::f7");
+  struct in6_addr s1 = addr("2001:db8::f7");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  query_calls = 0;
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+
+  stub_now += 3 * OMGP_TIME_PER_SECOND;
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  CHECK(!query_suppress);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 2);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_failed_suppressed_group_query_keeps_deadline(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::f8");
+
+  groups_update_config(&g, true, 10 * OMGP_TIME_PER_SECOND,
+                       125 * OMGP_TIME_PER_SECOND, 7);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  CHECK(!query_suppress);
+  const struct group* group = groups_get(&g, &grp);
+  omgp_time_t deadline = stub_now + 7 * OMGP_TIME_PER_SECOND;
+  CHECK(group != NULL && group->exclude_until == deadline);
+
+  groups_update_config(&g, true, 10 * OMGP_TIME_PER_SECOND,
+                       125 * OMGP_TIME_PER_SECOND, 2);
+  query_calls = 0;
+  query_result = GROUPS_QUERY_FAILED;
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 1);
+  CHECK(query_suppress);
+  group = groups_get(&g, &grp);
+  CHECK(group != NULL && group->exclude_until == deadline);
+
+  groups_deinit(&g);
+}
+
+static void test_failed_suppressed_source_query_keeps_deadline(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::f9");
+  struct in6_addr s1 = addr("2001:db8::f9");
+
+  groups_update_config(&g, true, 10 * OMGP_TIME_PER_SECOND,
+                       125 * OMGP_TIME_PER_SECOND, 7);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  CHECK(query_source_count == 1);
+  CHECK(!query_suppress);
+  const struct group* group = groups_get(&g, &grp);
+  omgp_time_t deadline = stub_now + 7 * OMGP_TIME_PER_SECOND;
+  CHECK(group != NULL && group->source_count == 1);
+  if (group) {
+    const struct group_source* source;
+    group_for_each_source (source, group) {
+      CHECK(source->include_until == deadline);
+    }
+  }
+
+  groups_update_config(&g, true, 10 * OMGP_TIME_PER_SECOND,
+                       125 * OMGP_TIME_PER_SECOND, 2);
+  query_calls = 0;
+  query_result = GROUPS_QUERY_FAILED;
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 1);
+  CHECK(query_suppress);
+  group = groups_get(&g, &grp);
+  CHECK(group != NULL);
+  if (group) {
+    const struct group_source* source;
+    group_for_each_source (source, group) {
+      CHECK(source->include_until == deadline);
+    }
+  }
+
+  groups_deinit(&g);
+}
+
+static void test_failed_suppressed_query_retries(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::f4");
+  struct in6_addr s1 = addr("2001:db8::f4");
 
   groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
   groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_ALLOW);
   query_calls = 0;
-  query_result = GROUPS_QUERY_SKIPPED;
+  query_result = GROUPS_QUERY_FAILED;
 
   stub_advance(0);
   CHECK(query_calls == 1);
+  CHECK(query_source_count == 1);
+  CHECK(query_suppress);
+  query_result = GROUPS_QUERY_SENT;
   stub_advance(OMGP_TIME_PER_SECOND);
-  CHECK(query_calls == 1);
+  CHECK(query_calls == 2);
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 3);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
 
   groups_deinit(&g);
 }
@@ -623,43 +740,42 @@ static void test_overdue_source_membership_stays_active(void) {
   groups_deinit(&g);
 }
 
-static void test_failed_suppressed_group_query_keeps_deadline(void) {
+static void test_skipped_group_query_keeps_deadline(void) {
   setup();
-  struct in6_addr grp = addr("ff05::f8");
+  struct in6_addr grp = addr("ff05::b3");
 
   groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
   groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
-  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
-  groups_update_timers(&g, &grp, NULL, 0, 10 * OMGP_TIME_PER_SECOND, 2);
-  omgp_time_t lowered = stub_now + 20 * OMGP_TIME_PER_SECOND;
-
+  omgp_time_t lowered = stub_now + 2 * OMGP_TIME_PER_SECOND;
   query_calls = 0;
-  query_result = GROUPS_QUERY_FAILED;
+  query_result = GROUPS_QUERY_SKIPPED;
+
   stub_advance(0);
   CHECK(query_calls == 1);
-  CHECK(query_suppress);
   const struct group* group = groups_get(&g, &grp);
   CHECK(group != NULL && group->exclude_until == lowered);
+
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 1);
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&g, &grp) == NULL);
 
   groups_deinit(&g);
 }
 
-static void test_failed_suppressed_source_query_keeps_deadline(void) {
+static void test_skipped_source_query_keeps_deadline(void) {
   setup();
-  struct in6_addr grp = addr("ff05::f9");
-  struct in6_addr s1 = addr("2001:db8::f9");
+  struct in6_addr grp = addr("ff05::b4");
+  struct in6_addr s1 = addr("2001:db8::b4");
 
   groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
   groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
-  groups_update_state(&g, &grp, &s1, 1, UPDATE_ALLOW);
-  groups_update_timers(&g, &grp, &s1, 1, 10 * OMGP_TIME_PER_SECOND, 2);
-  omgp_time_t lowered = stub_now + 20 * OMGP_TIME_PER_SECOND;
-
+  omgp_time_t lowered = stub_now + 2 * OMGP_TIME_PER_SECOND;
   query_calls = 0;
-  query_result = GROUPS_QUERY_FAILED;
+  query_result = GROUPS_QUERY_SKIPPED;
+
   stub_advance(0);
   CHECK(query_calls == 1);
-  CHECK(query_suppress);
   const struct group* group = groups_get(&g, &grp);
   CHECK(group != NULL);
   if (group) {
@@ -668,6 +784,97 @@ static void test_failed_suppressed_source_query_keeps_deadline(void) {
       CHECK(source->include_until == lowered);
     }
   }
+
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 1);
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_preflight_purge_announces_reduced_sources(void) {
+  setup();
+  g.source_limit = 2;
+  struct in6_addr grp = addr("ff35::b5");
+  struct in6_addr srcs[2] = {addr("2001:db8::1"), addr("2001:db8::2")};
+
+  groups_update_state(&g, &grp, srcs, 2, UPDATE_IS_INCLUDE);
+  groups_update_state(&g, &grp, &srcs[0], 1, UPDATE_BLOCK);
+
+  stub_now += 100 * OMGP_TIME_PER_SECOND;
+  groups_update_state(&g, &grp, &srcs[1], 1, UPDATE_IS_INCLUDE);
+
+  stub_now += 200 * OMGP_TIME_PER_SECOND;
+  int before = update_calls;
+  groups_update_state(&g, &grp, &srcs[1], 1, UPDATE_IS_INCLUDE);
+  CHECK(update_calls == before + 1);
+  CHECK(update_source_count == 1);
+  CHECK(!groups_includes_group(&g, &grp, &srcs[0], stub_now));
+  CHECK(groups_includes_group(&g, &grp, &srcs[1], stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_preflight_purge_announces_before_limit_reject(void) {
+  setup();
+  g.source_limit = 1;
+  struct in6_addr grp = addr("ff35::b6");
+  struct in6_addr old = addr("2001:db8::1");
+  struct in6_addr fresh[2] = {addr("2001:db8::2"), addr("2001:db8::3")};
+
+  groups_update_state(&g, &grp, &old, 1, UPDATE_IS_INCLUDE);
+  groups_update_state(&g, &grp, &old, 1, UPDATE_BLOCK);
+
+  stub_now += 300 * OMGP_TIME_PER_SECOND;
+  int before = update_calls;
+  groups_update_state(&g, &grp, fresh, 2, UPDATE_IS_INCLUDE);
+  CHECK(update_calls == before + 1);
+  CHECK(update_source_count == 0);
+  CHECK(!groups_includes_group(&g, &grp, &old, stub_now));
+  CHECK(!groups_includes_group(&g, &grp, &fresh[0], stub_now));
+
+  stub_advance(0);
+  CHECK(groups_get(&g, &grp) == NULL);
+
+  groups_deinit(&g);
+}
+
+static void test_ssm_preflight_purges_pending_source_at_natural_cap(void) {
+  setup();
+  g.source_limit = 1;
+  struct in6_addr grp = addr("ff35::b7");
+  struct in6_addr old = addr("2001:db8::1");
+  struct in6_addr fresh = addr("2001:db8::2");
+
+  groups_update_state(&g, &grp, &old, 1, UPDATE_IS_INCLUDE);
+  groups_update_state(&g, &grp, &old, 1, UPDATE_BLOCK);
+
+  stub_now += 260 * OMGP_TIME_PER_SECOND;
+  groups_update_state(&g, &grp, &fresh, 1, UPDATE_IS_INCLUDE);
+  CHECK(groups_includes_group(&g, &grp, &fresh, stub_now));
+  CHECK(!groups_includes_group(&g, &grp, &old, stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_ssm_preflight_keeps_pending_source_before_cap(void) {
+  setup();
+  g.source_limit = 1;
+  struct in6_addr grp = addr("ff35::b8");
+  struct in6_addr old = addr("2001:db8::1");
+  struct in6_addr fresh = addr("2001:db8::2");
+
+  groups_update_state(&g, &grp, &old, 1, UPDATE_IS_INCLUDE);
+  groups_update_state(&g, &grp, &old, 1, UPDATE_BLOCK);
+
+  stub_now += 3 * OMGP_TIME_PER_SECOND;
+  groups_update_state(&g, &grp, &fresh, 1, UPDATE_IS_INCLUDE);
+  CHECK(!groups_includes_group(&g, &grp, &fresh, stub_now));
+  CHECK(groups_includes_group(&g, &grp, &old, stub_now));
+  const struct group* group = groups_get(&g, &grp);
+  CHECK(group != NULL && group->source_count == 1);
 
   groups_deinit(&g);
 }
@@ -712,6 +919,111 @@ static void test_received_query_deadline_overrides_source_protection(void) {
   stub_advance(150);
   CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
   CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_received_later_query_caps_group_at_current_deadline(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::c6");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+
+  omgp_time_t deadline = stub_now + 2 * OMGP_TIME_PER_SECOND;
+  groups_update_timers(&g, &grp, NULL, 0, 2 * OMGP_TIME_PER_SECOND, 2);
+  const struct group* group = groups_get(&g, &grp);
+  CHECK(group != NULL && group->exclude_until == deadline);
+  CHECK(group != NULL && group->expire_cap == deadline);
+
+  query_result = GROUPS_QUERY_FAILED;
+  stub_advance(2 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&g, &grp) == NULL);
+
+  groups_deinit(&g);
+}
+
+static void test_received_later_query_caps_source_at_current_deadline(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::c7");
+  struct in6_addr s1 = addr("2001:db8::c7");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+
+  omgp_time_t deadline = stub_now + 2 * OMGP_TIME_PER_SECOND;
+  groups_update_timers(&g, &grp, &s1, 1, 2 * OMGP_TIME_PER_SECOND, 2);
+  const struct group* group = groups_get(&g, &grp);
+  CHECK(group != NULL && group->source_count == 1);
+  if (group) {
+    const struct group_source* source;
+    group_for_each_source (source, group) {
+      CHECK(source->include_until == deadline);
+      CHECK(source->expire_cap == deadline);
+    }
+  }
+
+  query_result = GROUPS_QUERY_FAILED;
+  stub_advance(2 * OMGP_TIME_PER_SECOND);
+  CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_protected_expired_deadline_not_rearmed_immediately(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::c3");
+  struct in6_addr s1 = addr("2001:db8::c3");
+  struct in6_addr other = addr("ff05::c4");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  stub_advance(0);
+
+  struct group* group = (struct group*)groups_get(&g, &grp);
+  CHECK(group != NULL && group->retransmit > 0);
+  group->exclude_until = stub_now;
+  struct group_source* source;
+  group_for_each_source (source, group) {
+    CHECK(source->retransmit > 0);
+    source->include_until = stub_now;
+  }
+
+  groups_update_state(&g, &other, NULL, 0, UPDATE_TO_IN);
+  stub_advance(0);
+  CHECK(groups_get(&g, &grp) != NULL);
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+  CHECK(ev_timer_remaining(&g.timer) > 0);
+
+  groups_deinit(&g);
+}
+
+static void test_overdue_repeated_to_in_restarts_query_schedule(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::c5");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+
+  stub_now += 3 * OMGP_TIME_PER_SECOND;
+  query_calls = 0;
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  CHECK(!query_suppress);
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 2);
+  CHECK(groups_get(&g, &grp) != NULL);
+  stub_advance(OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&g, &grp) == NULL);
 
   groups_deinit(&g);
 }
@@ -764,6 +1076,66 @@ static void test_pending_exclude_records_use_effective_group_timer(void) {
   }
 }
 
+static void test_group_query_retries_stop_at_expire_cap(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::c9");
+  struct in6_addr s1 = addr("2001:db8::c9");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_TO_IN);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+
+  groups_update_timers(&g, &grp, NULL, 0, OMGP_TIME_PER_SECOND, 2);
+  query_result = GROUPS_QUERY_FAILED;
+  stub_advance(2 * OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 2);
+
+  const struct group* group = groups_get(&g, &grp);
+  CHECK(group != NULL && group->exclude_until == 0);
+  CHECK(group != NULL && group->retransmit == 0);
+  CHECK(group != NULL && group->next_generic_transmit == 0);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+
+  stub_advance(5 * OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 2);
+
+  groups_deinit(&g);
+}
+
+static void test_source_query_retries_stop_at_expire_cap(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::ca");
+  struct in6_addr s1 = addr("2001:db8::ca");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+
+  groups_update_timers(&g, &grp, &s1, 1, 3 * OMGP_TIME_PER_SECOND / 4, 2);
+  query_result = GROUPS_QUERY_FAILED;
+  stub_advance(3 * OMGP_TIME_PER_SECOND / 2);
+  CHECK(query_calls == 2);
+
+  const struct group* group = groups_get(&g, &grp);
+  CHECK(group != NULL && group->next_source_transmit == 0);
+  CHECK(group != NULL &&
+        ev_timer_remaining(&g.timer) == group->exclude_until - stub_now);
+  CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
+  if (group) {
+    const struct group_source* source;
+    group_for_each_source (source, group) {
+      CHECK(source->retransmit == 0);
+    }
+  }
+
+  stub_advance(5 * OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == 2);
+
+  groups_deinit(&g);
+}
+
 static void test_source_cap_preserves_other_query_schedule(void) {
   setup();
   struct in6_addr grp = addr("ff05::cb");
@@ -786,7 +1158,6 @@ static void test_source_cap_preserves_other_query_schedule(void) {
 
   query_result = GROUPS_QUERY_FAILED;
   stub_now += 100 * OMGP_TIME_PER_SECOND;
-  groups_update_state(&g, &grp, &srcs[0], 1, UPDATE_TO_EX);
   groups_update_state(&g, &grp, &srcs[0], 1, UPDATE_TO_EX);
   groups_update_state(&g, &grp, &srcs[1], 1, UPDATE_BLOCK);
   stub_advance(0);
@@ -826,30 +1197,43 @@ int main(void) {
   test_compat_mode_ignores_block();
   test_source_overflow_falls_back_to_asm();
   test_source_overflow_mid_update_falls_back_to_asm();
-  test_duplicate_sources_in_record();
+  test_group_limit_enforced();
+  test_other_querier_timer_update();
+  test_overdue_timer_not_postponed();
+  test_repeated_block_sends_immediate_query_keeps_counter();
+  test_repeated_to_in_restarts_group_query_sequence();
   test_ssm_ignores_exclude_and_legacy();
   test_ssm_source_overflow_rejects_whole_record();
   test_ssm_source_overflow_preserves_existing_state();
   test_ssm_preflight_ignores_expired_sources();
   test_ssm_preflight_purges_pending_source_past_cap();
-  test_overdue_timer_not_postponed();
-  test_repeated_block_sends_immediate_query_keeps_counter();
-  test_repeated_to_in_restarts_group_query_sequence();
-  test_group_limit_enforced();
-  test_other_querier_timer_update();
-  test_group_query_attempt_kept_after_failure();
-  test_failed_group_queries_stop_at_natural_expiry();
-  test_source_query_attempt_kept_after_failure();
-  test_failed_source_queries_stop_at_natural_expiry();
-  test_skipped_group_query_cancels_schedule();
-  test_skipped_source_query_cancels_schedule();
-  test_overdue_group_membership_stays_active();
-  test_overdue_source_membership_stays_active();
+  test_duplicate_sources_in_record();
+  test_failed_group_query_retries_fail_open();
+  test_group_query_window_after_failed_attempt();
+  test_source_query_window_after_failed_attempt();
+  test_failed_source_query_retries_fail_open();
+  test_overdue_leave_dispatch_keeps_query_schedule();
+  test_overdue_block_dispatch_keeps_query_schedule();
   test_failed_suppressed_group_query_keeps_deadline();
   test_failed_suppressed_source_query_keeps_deadline();
+  test_failed_suppressed_query_retries();
+  test_overdue_group_membership_stays_active();
+  test_overdue_source_membership_stays_active();
+  test_skipped_group_query_keeps_deadline();
+  test_skipped_source_query_keeps_deadline();
+  test_preflight_purge_announces_reduced_sources();
+  test_preflight_purge_announces_before_limit_reject();
+  test_ssm_preflight_purges_pending_source_at_natural_cap();
+  test_ssm_preflight_keeps_pending_source_before_cap();
   test_received_query_deadline_overrides_group_protection();
   test_received_query_deadline_overrides_source_protection();
+  test_received_later_query_caps_group_at_current_deadline();
+  test_received_later_query_caps_source_at_current_deadline();
+  test_protected_expired_deadline_not_rearmed_immediately();
+  test_overdue_repeated_to_in_restarts_query_schedule();
   test_pending_exclude_records_use_effective_group_timer();
+  test_group_query_retries_stop_at_expire_cap();
+  test_source_query_retries_stop_at_expire_cap();
   test_source_cap_preserves_other_query_schedule();
   return test_result();
 }

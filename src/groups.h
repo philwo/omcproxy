@@ -111,8 +111,8 @@ void groups_update_timers(struct groups* groups,
                           const struct in6_addr* groupaddr,
                           const struct in6_addr* addrs,
                           size_t len,
-                          omgp_time_t last_listener_query_interval,
-                          int last_listener_query_count);
+                          omgp_time_t llqi,
+                          int llqc);
 
 void groups_update_state(struct groups* groups,
                          const struct in6_addr* groupaddr,

@@ -87,7 +87,7 @@ static void finish_source_batch(struct group* group,
                                 enum groups_query_result result,
                                 bool suppress,
                                 omgp_time_t now,
-                                omgp_time_t next_transmit,
+                                omgp_time_t llqi,
                                 omgp_time_t interval) {
   struct group_source* source;
   list_for_each_entry (source, batch, head) {
@@ -108,7 +108,7 @@ static void finish_source_batch(struct group* group,
       }
     }
     if (source->retransmit > 0) {
-      group->next_source_transmit = next_transmit;
+      group->next_source_transmit = llqi;
     }
   }
   list_splice_init(batch, &group->sources);
@@ -191,7 +191,7 @@ static omgp_time_t expire_group(struct groups* groups,
       group->next_generic_transmit = llqi;
     }
 
-    // Skip suppresed source-specific query (RFC 3810 7.6.3.2)
+    // Skip suppressed source-specific query (RFC 3810 7.6.3.2)
     finish_source_batch(group, &suppressed, result, true, now, llqi,
                         cfg->last_listener_query_interval);
   }
@@ -381,14 +381,14 @@ void groups_update_config(struct groups* groups,
   cfg->last_listener_query_interval = 1 * OMGP_TIME_PER_SECOND;
 }
 
-// Update timers for a given group (called when receiving queries from other
-// queriers)
+// Update timers for a given group using the received query's Max Resp Delay
+// and robustness (called when receiving queries from other queriers)
 void groups_update_timers(struct groups* groups,
                           const struct in6_addr* groupaddr,
                           const struct in6_addr* addrs,
                           size_t len,
-                          omgp_time_t last_listener_query_interval,
-                          int last_listener_query_count) {
+                          omgp_time_t llqi,
+                          int llqc) {
   char addrbuf[ADDR_BUFLEN];
   addr_ntop(addrbuf, sizeof(addrbuf), groupaddr);
   struct group* group = groups_get_group(groups, groupaddr, NULL);
@@ -398,8 +398,7 @@ void groups_update_timers(struct groups* groups,
   }
 
   omgp_time_t now = omgp_time();
-  omgp_time_t llqt =
-      now + (last_listener_query_interval * last_listener_query_count);
+  omgp_time_t llqt = now + (llqi * llqc);
 
   if (len == 0) {
     if (group->exclude_until > llqt) {
@@ -523,6 +522,7 @@ void groups_update_state(struct groups* groups,
       if (stale->include_until <= now &&
           (stale->retransmit <= 0 || stale->expire_cap <= now)) {
         groups_remove_source(group, stale);
+        changed = true;
       }
     }
 
@@ -544,6 +544,11 @@ void groups_update_state(struct groups* groups,
         list_del(&group->head);
         free(group);
         --groups->group_count;
+      } else if (changed) {
+        if (groups->cb_update) {
+          groups->cb_update(groups, group, now);
+        }
+        rearm_timer(groups, 0);
       }
       return;
     }
@@ -696,7 +701,6 @@ void groups_update_state(struct groups* groups,
     if (group->exclude_until > llqt) {
       group->exclude_until = llqt;
     }
-
     group->next_generic_transmit = now;
     group->retransmit = llqc;
     next_event = now;
