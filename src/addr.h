@@ -34,3 +34,11 @@ static inline void addr_map(struct in6_addr* addr6, in_addr_t addr4) {
 static inline in_addr_t addr_unmap(const struct in6_addr* addr6) {
   return addr6->s6_addr32[3];
 }
+
+static inline bool addr_is_ssm(const struct in6_addr* addr) {
+  if (IN6_IS_ADDR_V4MAPPED(addr)) {
+    return addr->s6_addr[12] == 232;
+  }
+  return addr->s6_addr[0] == 0xff && (addr->s6_addr[1] & 0xf0) == 0x30 &&
+         addr->s6_addr[2] == 0 && addr->s6_addr[3] == 0;
+}

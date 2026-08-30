@@ -36,10 +36,35 @@ static void test_full_length_address_fits(void) {
                "2001:db8:1234:5678:9abc:def0:1234:5678") == 0);
 }
 
+static void test_ssm_ranges(void) {
+  struct in6_addr a;
+
+  a = addr("ff35::1");
+  CHECK(addr_is_ssm(&a));
+  a = addr("ff3e::8000:1");
+  CHECK(addr_is_ssm(&a));
+  a = addr("::ffff:232.1.2.3");
+  CHECK(addr_is_ssm(&a));
+
+  a = addr("ff3e:40:2001:db8::1234");
+  CHECK(!addr_is_ssm(&a));
+  a = addr("ff35:100::1");
+  CHECK(!addr_is_ssm(&a));
+  a = addr("ff0e::1");
+  CHECK(!addr_is_ssm(&a));
+  a = addr("ff7e::1");
+  CHECK(!addr_is_ssm(&a));
+  a = addr("::ffff:224.1.1.1");
+  CHECK(!addr_is_ssm(&a));
+  a = addr("::ffff:239.1.2.3");
+  CHECK(!addr_is_ssm(&a));
+}
+
 int main(void) {
   test_formats_ipv6();
   test_formats_v4mapped_as_ipv4();
   test_small_buffer_returns_placeholder();
   test_full_length_address_fits();
+  test_ssm_ranges();
   return test_result();
 }
