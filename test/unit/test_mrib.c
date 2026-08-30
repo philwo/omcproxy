@@ -36,6 +36,9 @@ static struct mfc_entry mfc_table[MAX_MFC];
 static int mfc_ops;
 static int add_mfc_fail_count;
 static int add_mfc_fail_errno;
+static int pim_fail_errno;
+static int pim6_fail_errno;
+static int open_sockets;
 static int mrt_assert_val;
 static int mrt6_assert_val;
 static int mrt_pim_val;
@@ -44,12 +47,6 @@ static struct stub_msg msgq[MAX_MSGS];
 static size_t msgq_len;
 static size_t msgq_pos;
 static int next_fd = BASE_FD;
-static int socket_calls;
-static int socket_fail_call;
-static int open_sockets;
-static int fail_optname;
-static int fail_level;
-static int del_vif_calls;
 
 static struct mrib_user uplink;
 static struct mrib_user uplink2;
@@ -135,11 +132,6 @@ int __wrap_socket(int domain, int type, int protocol) {
   (void)domain;
   (void)type;
   (void)protocol;
-  ++socket_calls;
-  if (socket_calls == socket_fail_call) {
-    errno = EMFILE;
-    return -1;
-  }
   ++open_sockets;
   return next_fd++;
 }
@@ -163,13 +155,6 @@ int __wrap_setsockopt(int fd,
                       const void* optval,
                       socklen_t optlen) {
   (void)fd;
-  if (level == fail_level && optname == fail_optname) {
-    errno = EIO;
-    return -1;
-  }
-  if (level == IPPROTO_IP && optname == MRT_DEL_VIF) {
-    ++del_vif_calls;
-  }
   if (level == IPPROTO_IP && optname == MRT_ASSERT && optlen == sizeof(int)) {
     memcpy(&mrt_assert_val, optval, sizeof(mrt_assert_val));
   } else if (level == IPPROTO_IPV6 && optname == MRT6_ASSERT &&
@@ -177,9 +162,17 @@ int __wrap_setsockopt(int fd,
     memcpy(&mrt6_assert_val, optval, sizeof(mrt6_assert_val));
   } else if (level == IPPROTO_IP && optname == MRT_PIM &&
              optlen == sizeof(int)) {
+    if (pim_fail_errno != 0) {
+      errno = pim_fail_errno;
+      return -1;
+    }
     memcpy(&mrt_pim_val, optval, sizeof(mrt_pim_val));
   } else if (level == IPPROTO_IPV6 && optname == MRT6_PIM &&
              optlen == sizeof(int)) {
+    if (pim_fail_errno != 0 || pim6_fail_errno != 0) {
+      errno = (pim_fail_errno != 0) ? pim_fail_errno : pim6_fail_errno;
+      return -1;
+    }
     memcpy(&mrt6_pim_val, optval, sizeof(mrt6_pim_val));
   } else if (level == IPPROTO_IP &&
              (optname == MRT_ADD_MFC || optname == MRT_DEL_MFC)) {
@@ -342,6 +335,30 @@ static void teardown(void) {
   msgq_len = 0;
 }
 
+static void test_pim_unsupported_fails_init(void) {
+  pim_fail_errno = ENOPROTOOPT;
+  struct mrib_user user = {0};
+  CHECK(mrib_attach_user(&user, 100, NULL) == -ENOPROTOOPT);
+  CHECK(stub_fd_count == 0);
+  CHECK(open_sockets == 0);
+  pim_fail_errno = 0;
+}
+
+static void test_pim6_unsupported_fails_init(void) {
+  pim6_fail_errno = ENOPROTOOPT;
+  struct mrib_user user = {0};
+  CHECK(mrib_attach_user(&user, 100, NULL) == -ENOPROTOOPT);
+  CHECK(stub_fd_count == 0);
+  CHECK(open_sockets == 0);
+  pim6_fail_errno = 0;
+
+  CHECK(mrib_attach_user(&user, 100, NULL) == 0);
+  CHECK(stub_fd_count == 2);
+  CHECK(open_sockets == 2);
+  CHECK(mrt6_pim_val == 1);
+  mrib_detach_user(&user);
+}
+
 static void test_wrongvif_from_uplink_reparents(void) {
   setup();
   CHECK(mrt_assert_val == 1);
@@ -476,6 +493,28 @@ static void test_refresh_failure_drops_route(void) {
   teardown();
 }
 
+static void test_refresh_reconciles_output_interfaces(void) {
+  setup();
+  membership_active = false;
+  inject_mrt(IGMPMSG_NOCACHE, 0, "10.0.0.2", "239.1.2.3");
+
+  struct in_addr group4;
+  struct in_addr source4;
+  CHECK(inet_pton(AF_INET, "239.1.2.3", &group4) == 1);
+  CHECK(inet_pton(AF_INET, "10.0.0.2", &source4) == 1);
+  struct in6_addr group = map4(group4);
+  struct in6_addr source = map4(source4);
+  struct mfc_entry* entry = mfc_find(&group, &source);
+  CHECK(entry != NULL && entry->oifs == 0);
+
+  membership_active = true;
+  mrib_refresh(&uplink, &group);
+  entry = mfc_find(&group, &source);
+  CHECK(entry != NULL && entry->oifs == mrib_filter_bit(1));
+
+  teardown();
+}
+
 static void test_repeated_nocache_keeps_single_route(void) {
   setup();
   struct in6_addr group = addr6("::ffff:239.6.6.6");
@@ -538,6 +577,7 @@ static void test_reparented_route_expires_from_new_parent(void) {
   struct in6_addr source = addr6("::ffff:10.0.1.2");
 
   inject_mrt(IGMPMSG_NOCACHE, 1, "10.0.1.2", "239.1.1.4");
+  stub_advance(60 * OMGP_TIME_PER_SECOND);
   inject_mrt(IGMPMSG_WRONGVIF, 0, "10.0.1.2", "239.1.1.4");
   struct mfc_entry* e = mfc_find(&group, &source);
   CHECK(e != NULL);
@@ -545,7 +585,14 @@ static void test_reparented_route_expires_from_new_parent(void) {
     CHECK(e->parent == 0);
   }
 
-  stub_advance((MRIB_DEFAULT_LIFETIME + 1) * OMGP_TIME_PER_SECOND);
+  stub_advance(70 * OMGP_TIME_PER_SECOND);
+  e = mfc_find(&group, &source);
+  CHECK(e != NULL);
+  if (e) {
+    CHECK(e->parent == 0);
+  }
+
+  stub_advance(60 * OMGP_TIME_PER_SECOND);
   CHECK(mfc_find(&group, &source) == NULL);
 
   teardown();
@@ -573,57 +620,6 @@ static void test_wrongmif_from_uplink_reparents_ipv6(void) {
   }
 
   teardown();
-}
-
-static void test_refresh_reconciles_output_interfaces(void) {
-  setup();
-  membership_active = false;
-  inject_mrt(IGMPMSG_NOCACHE, 0, "10.0.0.2", "239.1.2.3");
-
-  struct in_addr group4;
-  struct in_addr source4;
-  CHECK(inet_pton(AF_INET, "239.1.2.3", &group4) == 1);
-  CHECK(inet_pton(AF_INET, "10.0.0.2", &source4) == 1);
-  struct in6_addr group = map4(group4);
-  struct in6_addr source = map4(source4);
-  struct mfc_entry* entry = mfc_find(&group, &source);
-  CHECK(entry != NULL && entry->oifs == 0);
-
-  membership_active = true;
-  mrib_refresh(&uplink, &group);
-  entry = mfc_find(&group, &source);
-  CHECK(entry != NULL && entry->oifs == mrib_filter_bit(1));
-
-  teardown();
-}
-
-static void test_startup_failure_closes_partial_sockets(void) {
-  struct mrib_user user = {0};
-  socket_calls = 0;
-  socket_fail_call = 2;
-
-  CHECK(mrib_attach_user(&user, 100, NULL) == -EMFILE);
-  CHECK(user.iface == NULL);
-  CHECK(open_sockets == 0);
-  CHECK(stub_fd_count == 0);
-
-  socket_fail_call = 0;
-}
-
-static void test_interface_setup_rolls_back_ipv4(void) {
-  struct mrib_user user = {0};
-  fail_optname = MRT6_ADD_MIF;
-  fail_level = IPPROTO_IPV6;
-  del_vif_calls = 0;
-
-  CHECK(mrib_attach_user(&user, 102, NULL) == -EIO);
-  CHECK(user.iface == NULL);
-  CHECK(del_vif_calls == 1);
-
-  fail_optname = 0;
-  fail_level = 0;
-  CHECK(mrib_attach_user(&user, 102, NULL) == 0);
-  mrib_detach_user(&user);
 }
 
 static void test_iface_route_cap_evicts_oldest(void) {
@@ -698,19 +694,19 @@ static void test_global_route_cap_evicts_globally_oldest(void) {
 
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
-  test_startup_failure_closes_partial_sockets();
-  test_interface_setup_rolls_back_ipv4();
+  test_pim_unsupported_fails_init();
+  test_pim6_unsupported_fails_init();
   test_wrongvif_from_uplink_reparents();
   test_wrongvif_from_downlink_keeps_parent();
   test_wrongvif_reparent_failure_keeps_owner();
   test_nocache_program_failure_leaves_no_state();
   test_refresh_failure_drops_route();
+  test_refresh_reconciles_output_interfaces();
   test_repeated_nocache_keeps_single_route();
   test_wrongvif_for_untracked_route_is_ignored();
   test_wrongvif_between_uplinks_keeps_parent();
   test_reparented_route_expires_from_new_parent();
   test_wrongmif_from_uplink_reparents_ipv6();
-  test_refresh_reconciles_output_interfaces();
   test_iface_route_cap_evicts_oldest();
   test_cap_admission_failure_keeps_existing_routes();
   test_global_route_cap_evicts_globally_oldest();

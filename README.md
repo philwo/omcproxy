@@ -61,6 +61,15 @@ LANs with more than one proxy. The default is to keep forwarding even after
 losing the election, which is the safe choice when another device (such as a
 snooping switch) sends queries but does not forward multicast itself.
 
+The kernel must support PIM on the multicast routing sockets
+(`CONFIG_IP_PIMSM_V1` or `CONFIG_IP_PIMSM_V2`, and `CONFIG_IPV6_PIMSM_V2`).
+Common distribution kernels enable these options. OpenWrt's generic kernel
+configuration disables IPv4 PIM, so OpenWrt needs a custom kernel
+configuration that enables the options. omcproxy uses PIM mode to receive
+wrong-interface upcalls for any arrival interface, which it needs to recover
+forwarding when a spoofed packet created a multicast route with the wrong
+parent. Startup fails when the kernel lacks this support.
+
 ## Testing
 
 ```sh

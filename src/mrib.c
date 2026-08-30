@@ -326,6 +326,12 @@ static void mrib_wrong_parent(struct mrib_iface* arrival,
   inet_ntop(AF_INET6, group, groupbuf, sizeof(groupbuf));
   inet_ntop(AF_INET6, source, sourcebuf, sizeof(sourcebuf));
 
+  if (!mrib_iface_owns_routes(arrival)) {
+    L_DEBUG("%s: ignoring upcall for %s from %s on non-uplink %d", __FUNCTION__,
+            groupbuf, sourcebuf, arrival->ifindex);
+    return;
+  }
+
   struct mrib_iface* owner = NULL;
   struct mrib_route* route = NULL;
   for (size_t i = 0; i < MAXMIFS && !route; ++i) {
@@ -349,7 +355,7 @@ static void mrib_wrong_parent(struct mrib_iface* arrival,
     return;
   }
 
-  if (!mrib_iface_owns_routes(arrival) || mrib_iface_owns_routes(owner)) {
+  if (mrib_iface_owns_routes(owner)) {
     L_DEBUG("%s: keeping parent %d for %s from %s despite upcall on %d",
             __FUNCTION__, owner->ifindex, groupbuf, sourcebuf,
             arrival->ifindex);
@@ -707,9 +713,9 @@ static int mrib_init(void) {
     goto err;
   }
 
+  // Required for spoofed-parent recovery; needs CONFIG_IP_PIMSM_V1/V2
   if (setsockopt(fd4, IPPROTO_IP, MRT_PIM, &val, sizeof(val))) {
-    L_WARN("%s: cannot enable PIM mode, spoofed-parent recovery is limited",
-           __FUNCTION__);
+    goto err;
   }
 
   if (setsockopt(fd4, IPPROTO_IP, IP_PKTINFO, &val, sizeof(val))) {
@@ -754,9 +760,9 @@ static int mrib_init(void) {
     goto err;
   }
 
+  // Required for spoofed-parent recovery; needs CONFIG_IPV6_PIMSM_V2
   if (setsockopt(fd6, IPPROTO_IPV6, MRT6_PIM, &val, sizeof(val))) {
-    L_WARN("%s: cannot enable PIM mode, spoofed-parent recovery is limited",
-           __FUNCTION__);
+    goto err;
   }
 
   if (setsockopt(fd6, IPPROTO_IPV6, IPV6_RECVHOPOPTS, &val, sizeof(val))) {
