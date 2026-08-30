@@ -88,8 +88,12 @@ static void finish_source_batch(struct group* group,
       --source->retransmit;
     } else if (result == GROUPS_QUERY_SKIPPED) {
       source->retransmit = 0;
-    } else if (!suppress && source->include_until > now) {
+    } else if (!suppress && source->include_until > now &&
+               source->include_until < source->expire_cap) {
       source->include_until += interval;
+      if (source->include_until > source->expire_cap) {
+        source->include_until = source->expire_cap;
+      }
     }
     if (source->retransmit > 0) {
       group->next_source_transmit = next_transmit;
@@ -138,8 +142,12 @@ static omgp_time_t expire_group(struct groups* groups,
       --group->retransmit;
     } else if (result == GROUPS_QUERY_SKIPPED) {
       group->retransmit = 0;
-    } else if (group->exclude_until > now && group->exclude_until <= llqt) {
+    } else if (group->exclude_until > now &&
+               group->exclude_until < group->expire_cap) {
       group->exclude_until += cfg->last_listener_query_interval;
+      if (group->exclude_until > group->expire_cap) {
+        group->exclude_until = group->expire_cap;
+      }
     }
 
     if (group->retransmit > 0) {
@@ -479,9 +487,11 @@ void groups_update_state(struct groups* groups,
 
       if (source->include_until <= now && update == UPDATE_SET_IN) {
         source->include_until = mali;
+        source->expire_cap = mali;
         changed = true;
       } else if (source->include_until > now && update == UPDATE_SET_EX) {
         source->include_until = now;
+        source->expire_cap = now;
         changed = true;
       }
 
@@ -498,6 +508,7 @@ void groups_update_state(struct groups* groups,
         source->include_until = (is_include || update == UPDATE_IS_EXCLUDE)
                                     ? mali
                                     : group->exclude_until;
+        source->expire_cap = source->include_until;
 
         if (next_event > mali) {
           next_event = mali;
@@ -518,6 +529,7 @@ void groups_update_state(struct groups* groups,
 
     groups_remove_unlisted_sources(group, addrs, len);
     group->exclude_until = mali;
+    group->expire_cap = mali;
 
     if (next_event > mali) {
       next_event = mali;
@@ -532,6 +544,7 @@ void groups_update_state(struct groups* groups,
 
     groups_remove_unlisted_sources(group, addrs, len);
     group->exclude_until = now;
+    group->expire_cap = now;
   }
 
   // Prepare queries

@@ -349,6 +349,24 @@ static void test_group_query_attempt_kept_after_failure(void) {
   groups_deinit(&g);
 }
 
+static void test_failed_group_queries_stop_at_natural_expiry(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::f1");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  query_calls = 0;
+  query_result = GROUPS_QUERY_FAILED;
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+
+  stub_advance(258 * OMGP_TIME_PER_SECOND);
+  CHECK(query_calls > 3);
+  CHECK(groups_get(&g, &grp) != NULL);
+  stub_advance(2 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&g, &grp) == NULL);
+
+  groups_deinit(&g);
+}
+
 static void test_source_query_attempt_kept_after_failure(void) {
   setup();
   struct in6_addr grp = addr("ff05::f3");
@@ -367,6 +385,26 @@ static void test_source_query_attempt_kept_after_failure(void) {
   CHECK(query_calls == 2);
   stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(query_calls == 3);
+
+  groups_deinit(&g);
+}
+
+static void test_failed_source_queries_stop_at_natural_expiry(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::f5");
+  struct in6_addr s1 = addr("2001:db8::f5");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  query_calls = 0;
+  query_result = GROUPS_QUERY_FAILED;
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+
+  stub_advance(100 * OMGP_TIME_PER_SECOND);
+  CHECK(query_calls > 3);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+
+  stub_advance(160 * OMGP_TIME_PER_SECOND);
+  CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
 
   groups_deinit(&g);
 }
@@ -471,7 +509,9 @@ int main(void) {
   test_group_limit_enforced();
   test_other_querier_timer_update();
   test_group_query_attempt_kept_after_failure();
+  test_failed_group_queries_stop_at_natural_expiry();
   test_source_query_attempt_kept_after_failure();
+  test_failed_source_queries_stop_at_natural_expiry();
   test_skipped_group_query_cancels_schedule();
   test_skipped_source_query_cancels_schedule();
   test_overdue_group_membership_stays_active();

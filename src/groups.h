@@ -30,6 +30,7 @@ struct group {
   struct list_head sources;
   size_t source_count;
   omgp_time_t exclude_until;
+  omgp_time_t expire_cap;
   omgp_time_t compat_v2_until;
   omgp_time_t compat_v1_until;
   omgp_time_t next_generic_transmit;
@@ -41,6 +42,7 @@ struct group_source {
   struct list_head head;
   struct in6_addr addr;
   omgp_time_t include_until;
+  omgp_time_t expire_cap;
   int retransmit;
 };
 
@@ -122,7 +124,7 @@ void groups_update_state(struct groups* groups,
 
 static inline bool group_is_included(const struct group* group,
                                      omgp_time_t time) {
-  if (group->retransmit > 0) {
+  if (group->retransmit > 0 && group->expire_cap > time) {
     return false;
   }
   return group->exclude_until <= time;
@@ -130,7 +132,7 @@ static inline bool group_is_included(const struct group* group,
 
 static inline bool source_is_included(const struct group_source* source,
                                       omgp_time_t time) {
-  if (source->retransmit > 0) {
+  if (source->retransmit > 0 && source->expire_cap > time) {
     return true;
   }
   return source->include_until > time;
