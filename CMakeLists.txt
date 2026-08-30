@@ -1,49 +1,50 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.21)
 
+project(omcproxy C)
 
-# Project Definition
-project(omcproxy LANGUAGES C)
-add_executable(${PROJECT_NAME})
-target_sources(${PROJECT_NAME} PRIVATE
-	src/client.c
-	src/groups.c
-	src/igmp.c
-	src/mld.c
-	src/mrib.c
-	src/omcproxy.c
-	src/proxy.c
-	src/querier.c
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+  message(FATAL_ERROR "In-source builds are not supported, use cmake -B build")
+endif()
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+
+option(OMCPROXY_WERROR "Treat compiler warnings as errors" OFF)
+option(OMCPROXY_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
+add_library(omcproxy_build INTERFACE)
+target_compile_features(omcproxy_build INTERFACE c_std_23)
+target_compile_definitions(omcproxy_build INTERFACE _GNU_SOURCE _TIME_BITS=64 _FILE_OFFSET_BITS=64)
+target_include_directories(omcproxy_build INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+if(DEFINED L_LEVEL)
+  target_compile_definitions(omcproxy_build INTERFACE L_LEVEL=${L_LEVEL})
+endif()
+if(OMCPROXY_SANITIZE)
+  target_compile_options(omcproxy_build INTERFACE -fsanitize=address,undefined -fno-sanitize-recover=all)
+  target_link_options(omcproxy_build INTERFACE -fsanitize=address,undefined)
+endif()
+
+add_library(omcproxy_warnings INTERFACE)
+target_compile_options(omcproxy_warnings INTERFACE -Wall -Wextra)
+if(OMCPROXY_WERROR)
+  target_compile_options(omcproxy_warnings INTERFACE -Werror)
+endif()
+
+find_library(libubox ubox REQUIRED)
+
+add_library(omcproxy_core OBJECT
+  src/client.c
+  src/groups.c
+  src/igmp.c
+  src/mld.c
+  src/mrib.c
+  src/proxy.c
+  src/querier.c
 )
+target_link_libraries(omcproxy_core PRIVATE omcproxy_build omcproxy_warnings)
 
+add_executable(omcproxy src/omcproxy.c)
+target_link_libraries(omcproxy PRIVATE omcproxy_build omcproxy_warnings omcproxy_core ${libubox})
 
-# Compiler Options
-set_target_properties(${PROJECT_NAME} PROPERTIES C_STANDARD 11)
-target_compile_definitions(${PROJECT_NAME} PRIVATE _GNU_SOURCE)
-target_compile_options(${PROJECT_NAME} PRIVATE -g3)
-target_compile_options(${PROJECT_NAME} PRIVATE -Os)
-target_compile_options(${PROJECT_NAME} PRIVATE -Wall)
-target_compile_options(${PROJECT_NAME} PRIVATE -Werror)
-target_compile_options(${PROJECT_NAME} PRIVATE -Wextra)
-target_compile_options(${PROJECT_NAME} PRIVATE -Werror=implicit-function-declaration)
-target_compile_options(${PROJECT_NAME} PRIVATE -Wformat)
-target_compile_options(${PROJECT_NAME} PRIVATE -Werror=format-security)
-target_compile_options(${PROJECT_NAME} PRIVATE -Werror=format-nonliteral)
-target_compile_options(${PROJECT_NAME} PRIVATE -Wno-unused-parameter)
-target_compile_options(${PROJECT_NAME} PRIVATE -Wmissing-declarations)
-
-
-# Libraries
-find_path(ubox_include_dir libubox/uloop.h)
-target_include_directories(${PROJECT_NAME} PRIVATE ${ubox_include_dir})
-find_library(libubox ubox)
-target_link_libraries(${PROJECT_NAME} PRIVATE ${libubox})
-
-
-# Optional Features
-if(${L_LEVEL})
-	target_compile_definitions(${PROJECT_NAME} PRIVATE L_LEVEL=${L_LEVEL})
-endif(${L_LEVEL})
-
-
-# Installation
-install(TARGETS ${PROJECT_NAME} DESTINATION sbin/)
+install(TARGETS omcproxy DESTINATION sbin)
