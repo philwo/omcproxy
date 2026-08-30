@@ -131,6 +131,24 @@ static omgp_time_t expire_group(struct groups* groups,
   struct group_source* s;
   struct group_source* s2;
 
+  if (group->retransmit > 0 && group->expire_cap <= now) {
+    group->retransmit = 0;
+    group->next_generic_transmit = 0;
+  }
+
+  bool source_retransmit = false;
+  list_for_each_entry (s, &group->sources, head) {
+    if (s->retransmit > 0 && s->expire_cap <= now) {
+      s->retransmit = 0;
+    }
+    if (s->retransmit > 0) {
+      source_retransmit = true;
+    }
+  }
+  if (!source_retransmit) {
+    group->next_source_transmit = 0;
+  }
+
   if (group->next_source_transmit > 0 && group->next_source_transmit <= now) {
     group->next_source_transmit = 0;
 
@@ -213,7 +231,8 @@ static omgp_time_t expire_group(struct groups* groups,
       // Leaving exclude mode
       group->exclude_until = 0;
       changed = true;
-    } else if (group->retransmit <= 0 && group->exclude_until < next_event) {
+    } else if (group->exclude_until > now &&
+               group->exclude_until < next_event) {
       next_event = group->exclude_until;
     }
   }
@@ -223,7 +242,7 @@ static omgp_time_t expire_group(struct groups* groups,
       if (!source_is_included(s, now)) {
         s->include_until = 0;
         changed = true;
-      } else if (s->retransmit <= 0 && s->include_until < next_event) {
+      } else if (s->include_until > now && s->include_until < next_event) {
         next_event = s->include_until;
       }
     }
@@ -386,6 +405,9 @@ void groups_update_timers(struct groups* groups,
     if (group->exclude_until > llqt) {
       group->exclude_until = llqt;
     }
+    if (group->expire_cap > group->exclude_until) {
+      group->expire_cap = group->exclude_until;
+    }
   } else {
     size_t unknown = 0;
     for (size_t i = 0; i < len; ++i) {
@@ -398,6 +420,9 @@ void groups_update_timers(struct groups* groups,
 
       if (source->include_until > llqt) {
         source->include_until = llqt;
+      }
+      if (source->expire_cap > source->include_until) {
+        source->expire_cap = source->include_until;
       }
     }
     if (unknown) {
@@ -468,7 +493,11 @@ void groups_update_state(struct groups* groups,
     len = 0;
   }
 
-  bool include = group->exclude_until <= now;
+  bool include = group_is_included(group, now);
+  omgp_time_t filter_until = group->exclude_until;
+  if (!include && filter_until <= now) {
+    filter_until = group->expire_cap;
+  }
   bool is_include = update == UPDATE_IS_INCLUDE || update == UPDATE_TO_IN ||
                     update == UPDATE_ALLOW;
 
@@ -524,9 +553,8 @@ void groups_update_state(struct groups* groups,
           changed = true;
         }
 
-        source->include_until = (is_include || update == UPDATE_IS_EXCLUDE)
-                                    ? mali
-                                    : group->exclude_until;
+        source->include_until =
+            (is_include || update == UPDATE_IS_EXCLUDE) ? mali : filter_until;
         source->expire_cap = source->include_until;
 
         if (next_event > mali) {

@@ -548,6 +548,150 @@ static void test_failed_suppressed_source_query_keeps_deadline(void) {
   groups_deinit(&g);
 }
 
+static void test_received_query_deadline_overrides_group_protection(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::c1");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  stub_advance(0);
+  CHECK(query_calls >= 1);
+
+  stub_advance(100);
+  groups_update_timers(&g, &grp, NULL, 0, 100, 2);
+
+  stub_advance(100);
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  stub_advance(150);
+  CHECK(groups_get(&g, &grp) == NULL);
+
+  groups_deinit(&g);
+}
+
+static void test_received_query_deadline_overrides_source_protection(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::c2");
+  struct in6_addr s1 = addr("2001:db8::c2");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  stub_advance(0);
+  CHECK(query_calls >= 1);
+
+  stub_advance(100);
+  groups_update_timers(&g, &grp, &s1, 1, 100, 2);
+
+  stub_advance(100);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+
+  stub_advance(150);
+  CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_pending_exclude_records_use_effective_group_timer(void) {
+  const struct {
+    enum groups_update update;
+    const char* group;
+    const char* source;
+  } cases[] = {
+      {UPDATE_BLOCK, "::ffff:239.1.2.8", "::ffff:192.0.2.8"},
+      {UPDATE_TO_EX, "ff05::c8", "2001:db8::c8"},
+  };
+
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+    setup();
+    struct in6_addr grp = addr(cases[i].group);
+    struct in6_addr s1 = addr(cases[i].source);
+
+    groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+    groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+    stub_advance(0);
+    CHECK(query_calls == 1);
+
+    const struct group* group = groups_get(&g, &grp);
+    omgp_time_t filter_cap = group ? group->expire_cap : 0;
+    CHECK(filter_cap > stub_now);
+
+    stub_now += 3 * OMGP_TIME_PER_SECOND;
+    query_calls = 0;
+    groups_update_state(&g, &grp, &s1, 1, cases[i].update);
+    CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+
+    group = groups_get(&g, &grp);
+    CHECK(group != NULL && group->source_count == 1);
+    if (group) {
+      const struct group_source* source;
+      group_for_each_source (source, group) {
+        CHECK(source->include_until == stub_now + 2 * OMGP_TIME_PER_SECOND);
+        CHECK(source->expire_cap == filter_cap);
+        CHECK(source->retransmit == 2);
+      }
+    }
+
+    stub_advance(0);
+    CHECK(query_calls == 2);
+    CHECK(query_source_count == 1);
+
+    groups_deinit(&g);
+  }
+}
+
+static void test_source_cap_preserves_other_query_schedule(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::cb");
+  struct in6_addr srcs[2] = {addr("2001:db8::cb"), addr("2001:db8::cc")};
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, &srcs[0], 1, UPDATE_BLOCK);
+  stub_advance(0);
+  CHECK(query_calls == 1);
+
+  const struct group* group = groups_get(&g, &grp);
+  omgp_time_t first_cap = 0;
+  if (group) {
+    const struct group_source* source;
+    group_for_each_source (source, group) {
+      first_cap = source->expire_cap;
+    }
+  }
+  CHECK(first_cap > stub_now);
+
+  query_result = GROUPS_QUERY_FAILED;
+  stub_now += 100 * OMGP_TIME_PER_SECOND;
+  groups_update_state(&g, &grp, &srcs[0], 1, UPDATE_TO_EX);
+  groups_update_state(&g, &grp, &srcs[0], 1, UPDATE_TO_EX);
+  groups_update_state(&g, &grp, &srcs[1], 1, UPDATE_BLOCK);
+  stub_advance(0);
+  CHECK(query_source_count == 2);
+
+  query_calls = 0;
+  stub_now = first_cap;
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  CHECK(query_source_count == 1);
+
+  group = groups_get(&g, &grp);
+  CHECK(group != NULL &&
+        group->next_source_transmit == stub_now + OMGP_TIME_PER_SECOND);
+  int expired = 0;
+  int pending = 0;
+  if (group) {
+    const struct group_source* source;
+    group_for_each_source (source, group) {
+      expired += source->retransmit == 0;
+      pending += source->retransmit > 0;
+    }
+  }
+  CHECK(expired == 1);
+  CHECK(pending == 1);
+
+  groups_deinit(&g);
+}
+
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
   test_asm_join_and_expiry();
@@ -573,5 +717,9 @@ int main(void) {
   test_overdue_source_membership_stays_active();
   test_failed_suppressed_group_query_keeps_deadline();
   test_failed_suppressed_source_query_keeps_deadline();
+  test_received_query_deadline_overrides_group_protection();
+  test_received_query_deadline_overrides_source_protection();
+  test_pending_exclude_records_use_effective_group_timer();
+  test_source_cap_preserves_other_query_schedule();
   return test_result();
 }
