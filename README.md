@@ -32,6 +32,10 @@ customer-originated multicast anyway.
 
 - C23, no external dependencies (libubox is replaced by a small epoll and
   timerfd event loop and a vendored intrusive list header)
+- Unit tests, network-namespace integration tests, sanitizer builds, a
+  libFuzzer harness for the packet parsers, and a strict warning set,
+  all wired into CI
+- Many bug fixes; see the git history for details
 
 ## Building
 
@@ -43,3 +47,16 @@ cmake --build --preset default
 ```
 
 The binary lands in `build/omcproxy`.
+
+## Testing
+
+```sh
+ctest --preset default    # unit tests
+ctest --preset netns      # integration tests in network namespaces
+```
+
+The netns tests need unprivileged user namespaces (or root). The `asan`
+preset builds with AddressSanitizer and UndefinedBehaviorSanitizer and has
+matching `asan` and `netns-asan` test presets. The `fuzz` preset builds
+`build-fuzz/test/fuzz_gmp`, a libFuzzer target for the packet parsers
+(requires clang).
