@@ -54,6 +54,7 @@ struct mrib_iface {
   struct list_head routes;
   struct list_head queriers;
   struct ev_timer timer;
+  size_t route_count;
 };
 
 #if __BYTE_ORDER == __BIG_ENDIAN
@@ -75,6 +76,7 @@ static_assert(MAXMIFS <= 8 * sizeof(mrib_filter),
               "MIF ids must fit the filter bitmap");
 
 static struct mrib_iface mifs[MAXMIFS] = {};
+static size_t mrib_route_count;
 static struct ev_fd mrt_fd = {.fd = -1};
 static struct ev_fd mrt6_fd = {.fd = -1};
 
@@ -175,6 +177,8 @@ static void mrib_clean_routes(struct mrib_iface* iface) {
       mrib_set(&c->group, &c->source, iface, 0, 1);
       list_del(&c->head);
       free(c);
+      --iface->route_count;
+      --mrib_route_count;
     } else {
       ev_timer_set(timer, c->valid_until - now);
       break;
@@ -215,6 +219,37 @@ static int mrib_program_route(struct mrib_iface* iface,
   return mrib_set(group, source, iface, filter, 0);
 }
 
+// Evict the interface's oldest route to make room for a new one
+static void mrib_evict_route(struct mrib_iface* iface) {
+  struct mrib_route* route =
+      list_first_entry(&iface->routes, struct mrib_route, head);
+  mrib_set(&route->group, &route->source, iface, 0, 1);
+  list_del(&route->head);
+  free(route);
+  --iface->route_count;
+  --mrib_route_count;
+}
+
+// Evict the route closest to expiry across all interfaces
+static void mrib_evict_globally_oldest(void) {
+  struct mrib_iface* oldest = NULL;
+  omgp_time_t oldest_until = 0;
+  for (size_t i = 0; i < MAXMIFS; ++i) {
+    if (mifs[i].ifindex == 0 || list_empty(&mifs[i].routes)) {
+      continue;
+    }
+    struct mrib_route* head =
+        list_first_entry(&mifs[i].routes, struct mrib_route, head);
+    if (!oldest || head->valid_until < oldest_until) {
+      oldest = &mifs[i];
+      oldest_until = head->valid_until;
+    }
+  }
+  if (oldest) {
+    mrib_evict_route(oldest);
+  }
+}
+
 // Notify all users of a new multicast source
 static void mrib_notify_newsource(struct mrib_iface* iface,
                                   const struct in6_addr* group,
@@ -233,6 +268,12 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
       mrib_program_route(iface, group, source);
       return;
     }
+  }
+
+  if (iface->route_count >= MRIB_MAX_IFACE_ROUTES) {
+    mrib_evict_route(iface);
+  } else if (mrib_route_count >= MRIB_MAX_ROUTES) {
+    mrib_evict_globally_oldest();
   }
 
   struct mrib_route* route = malloc(sizeof(*route));
@@ -255,6 +296,8 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
   }
 
   list_add_tail(&route->head, &iface->routes);
+  ++iface->route_count;
+  ++mrib_route_count;
 }
 
 // Test if an interface can be the parent of routes (i.e. is a proxy uplink)
@@ -318,12 +361,17 @@ static void mrib_wrong_parent(struct mrib_iface* arrival,
   }
 
   list_del(&route->head);
+  --owner->route_count;
+  if (arrival->route_count >= MRIB_MAX_IFACE_ROUTES) {
+    mrib_evict_route(arrival);
+  }
   route->valid_until =
       omgp_time() + MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND;
   if (list_empty(&arrival->routes)) {
     ev_timer_set(&arrival->timer, MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND);
   }
   list_add_tail(&route->head, &arrival->routes);
+  ++arrival->route_count;
 }
 
 // Re-evaluate output interfaces of a group's routes after a membership change

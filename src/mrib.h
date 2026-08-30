@@ -29,6 +29,8 @@
 #include <linux/igmp.h>
 
 #define MRIB_DEFAULT_LIFETIME 125
+#define MRIB_MAX_IFACE_ROUTES 512
+#define MRIB_MAX_ROUTES 1024
 
 #define IPV6_ALL_NODES_INIT                         \
   {                                                 \

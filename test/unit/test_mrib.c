@@ -15,7 +15,7 @@
 #include "test.h"
 
 #define BASE_FD 500
-#define MAX_MFC 16
+#define MAX_MFC (MRIB_MAX_ROUTES + 8)
 #define MAX_MSGS 8
 
 struct mfc_entry {
@@ -111,6 +111,16 @@ static void mfc_upsert(const struct in6_addr* group,
   }
   e->parent = parent;
   e->oifs = oifs;
+}
+
+static size_t mfc_count(void) {
+  size_t count = 0;
+  for (size_t i = 0; i < MAX_MFC; ++i) {
+    if (mfc_table[i].used) {
+      ++count;
+    }
+  }
+  return count;
 }
 
 static void mfc_del(const struct in6_addr* group,
@@ -269,6 +279,28 @@ static void inject_mrt6(unsigned char msgtype,
   CHECK(inet_pton(AF_INET6, source, &msg.im6_src) == 1);
   CHECK(inet_pton(AF_INET6, group, &msg.im6_dst) == 1);
   inject(stub_fds[1], &msg, sizeof(msg));
+}
+
+static struct in6_addr flow_source(uint32_t n) {
+  char buf[INET_ADDRSTRLEN];
+  snprintf(buf, sizeof(buf), "10.%u.%u.%u", (n >> 16) & 255, (n >> 8) & 255,
+           n & 255);
+  struct in_addr a;
+  CHECK(inet_pton(AF_INET, buf, &a) == 1);
+  return map4(a);
+}
+
+static void inject_flood(unsigned char vif,
+                         const char* group,
+                         uint32_t base,
+                         uint32_t count) {
+  for (uint32_t i = 0; i < count; ++i) {
+    char buf[INET_ADDRSTRLEN];
+    uint32_t n = base + i;
+    snprintf(buf, sizeof(buf), "10.%u.%u.%u", (n >> 16) & 255, (n >> 8) & 255,
+             n & 255);
+    inject_mrt(IGMPMSG_NOCACHE, vif, buf, group);
+  }
 }
 
 static void uplink_newsource(struct mrib_user* user,
@@ -567,6 +599,49 @@ static void test_interface_setup_rolls_back_ipv4(void) {
   mrib_detach_user(&user);
 }
 
+static void test_iface_route_cap_evicts_oldest(void) {
+  setup();
+  struct in6_addr group = addr6("::ffff:239.66.66.66");
+
+  inject_flood(1, "239.66.66.66", 0, MRIB_MAX_IFACE_ROUTES + 1);
+  CHECK(mfc_count() == MRIB_MAX_IFACE_ROUTES);
+
+  struct in6_addr oldest = flow_source(0);
+  struct in6_addr newest = flow_source(MRIB_MAX_IFACE_ROUTES);
+  CHECK(mfc_find(&group, &oldest) == NULL);
+  CHECK(mfc_find(&group, &newest) != NULL);
+
+  stub_advance((MRIB_DEFAULT_LIFETIME + 1) * OMGP_TIME_PER_SECOND);
+  CHECK(mfc_count() == 0);
+
+  teardown();
+}
+
+static void test_global_route_cap_evicts_globally_oldest(void) {
+  setup();
+  CHECK(mrib_attach_user(&uplink2, 102, uplink_newsource) == 0);
+  struct in6_addr group1 = addr6("::ffff:239.66.66.1");
+  struct in6_addr group3 = addr6("::ffff:239.66.66.3");
+
+  inject_flood(1, "239.66.66.1", 0, MRIB_MAX_IFACE_ROUTES);
+  stub_advance(OMGP_TIME_PER_SECOND);
+  inject_flood(2, "239.66.66.2", 0x10000, MRIB_MAX_IFACE_ROUTES);
+  CHECK(mfc_count() == MRIB_MAX_ROUTES);
+
+  inject_mrt(IGMPMSG_NOCACHE, 0, "10.99.99.99", "239.66.66.3");
+  CHECK(mfc_count() == MRIB_MAX_ROUTES);
+
+  struct in6_addr oldest = flow_source(0);
+  struct in6_addr newsrc = addr6("::ffff:10.99.99.99");
+  CHECK(mfc_find(&group1, &oldest) == NULL);
+  CHECK(mfc_find(&group3, &newsrc) != NULL);
+
+  stub_advance((MRIB_DEFAULT_LIFETIME + 1) * OMGP_TIME_PER_SECOND);
+  CHECK(mfc_count() == 0);
+
+  teardown();
+}
+
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
   test_startup_failure_closes_partial_sockets();
@@ -581,5 +656,7 @@ int main(void) {
   test_reparented_route_expires_from_new_parent();
   test_wrongmif_from_uplink_reparents_ipv6();
   test_refresh_reconciles_output_interfaces();
+  test_iface_route_cap_evicts_oldest();
+  test_global_route_cap_evicts_globally_oldest();
   return test_result();
 }
