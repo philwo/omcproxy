@@ -237,6 +237,40 @@ static void test_duplicate_sources_in_record(void) {
   groups_deinit(&g);
 }
 
+static void test_ssm_ignores_exclude_and_legacy(void) {
+  setup();
+  struct in6_addr grp6 = addr("ff35::8000:1");
+  struct in6_addr grp4 = addr("::ffff:232.1.2.3");
+  struct in6_addr s1 = addr("2001:db8::1");
+  struct in6_addr s2 = addr("2001:db8::2");
+
+  groups_update_state(&g, &grp6, NULL, 0, UPDATE_IS_EXCLUDE);
+  CHECK(groups_get(&g, &grp6) == NULL);
+  groups_update_state(&g, &grp6, NULL, 0, UPDATE_REPORT);
+  CHECK(groups_get(&g, &grp6) == NULL);
+  groups_update_state(&g, &grp6, NULL, 0, UPDATE_REPORT_V1);
+  CHECK(groups_get(&g, &grp6) == NULL);
+  groups_update_state(&g, &grp6, &s1, 1, UPDATE_TO_EX);
+  CHECK(groups_get(&g, &grp6) == NULL);
+  groups_update_state(&g, &grp4, NULL, 0, UPDATE_IS_EXCLUDE);
+  CHECK(groups_get(&g, &grp4) == NULL);
+
+  groups_update_state(&g, &grp6, &s1, 1, UPDATE_IS_INCLUDE);
+  CHECK(groups_includes_group(&g, &grp6, &s1, stub_now));
+  CHECK(!groups_includes_group(&g, &grp6, &s2, stub_now));
+
+  int queries_before = query_calls;
+  groups_update_state(&g, &grp6, NULL, 0, UPDATE_DONE);
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(query_calls == queries_before);
+  CHECK(groups_includes_group(&g, &grp6, &s1, stub_now));
+
+  groups_update_state(&g, &grp4, NULL, 0, UPDATE_DONE);
+  CHECK(groups_get(&g, &grp4) == NULL);
+
+  groups_deinit(&g);
+}
+
 static void test_overdue_timer_not_postponed(void) {
   setup();
   struct in6_addr g1 = addr("ff05::aa");
@@ -719,6 +753,7 @@ int main(void) {
   test_source_overflow_falls_back_to_asm();
   test_source_overflow_mid_update_falls_back_to_asm();
   test_duplicate_sources_in_record();
+  test_ssm_ignores_exclude_and_legacy();
   test_overdue_timer_not_postponed();
   test_repeated_block_sends_immediate_query_keeps_counter();
   test_repeated_to_in_restarts_group_query_sequence();

@@ -447,6 +447,15 @@ void groups_update_state(struct groups* groups,
   L_DEBUG("%s: %s (+%d sources) => %d", __FUNCTION__, addrbuf, (int)len,
           update);
 
+  if (addr_is_ssm(groupaddr) &&
+      (update == UPDATE_IS_EXCLUDE || update == UPDATE_TO_EX ||
+       update == UPDATE_REPORT || update == UPDATE_REPORT_V1 ||
+       update == UPDATE_DONE)) {
+    L_DEBUG("%s: ignoring non-source-specific update for SSM group %s",
+            __FUNCTION__, addrbuf);
+    return;
+  }
+
   struct group* group = groups_get_group(groups, groupaddr, &created);
   if (!group) {
     L_ERR("%s: failed to allocate group for %s", __FUNCTION__, addrbuf);

@@ -859,6 +859,41 @@ static void test_igmp_report_duplicates_do_not_crowd_out_sources(void) {
   teardown();
 }
 
+static void test_igmp_legacy_and_exclude_ssm_ignored(void) {
+  setup();
+  struct in6_addr grp;
+  addr_map(&grp, addr4("232.44.44.44"));
+
+  memset(pkt, 0, 8);
+  pkt[0] = 0x16;
+  in_addr_t a = addr4("232.44.44.44");
+  memcpy(&pkt[4], &a, 4);
+  igmp_input(8);
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  igmp_input(build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("232.44.44.44"),
+                               NULL, 0));
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  teardown();
+}
+
+static void test_mld_legacy_and_exclude_ssm_ignored(void) {
+  setup();
+  struct in6_addr grp = addr("ff35::4444");
+
+  memset(pkt, 0, 24);
+  pkt[0] = 131;
+  memcpy(&pkt[8], &grp, 16);
+  mld_input(24);
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  mld_input(build_mld_report(pkt, UPDATE_TO_EX, &grp, NULL, 0));
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  teardown();
+}
+
 static void test_mld_report_duplicates_do_not_crowd_out_sources(void) {
   setup();
   struct in6_addr grp = addr("ff05::1010");
@@ -922,5 +957,7 @@ int main(void) {
   test_igmp_query_source_beyond_76_processed();
   test_igmp_report_duplicates_do_not_crowd_out_sources();
   test_mld_report_duplicates_do_not_crowd_out_sources();
+  test_igmp_legacy_and_exclude_ssm_ignored();
+  test_mld_legacy_and_exclude_ssm_ignored();
   return test_result();
 }
