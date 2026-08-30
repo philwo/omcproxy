@@ -39,7 +39,7 @@ struct client {
 // Register a new interface to proxy
 int client_init(struct client* client, int ifindex);
 
-// Deregister a new interface from proxy
+// Deregister an interface from proxy
 void client_deinit(struct client* client);
 
 // Set / update / delete a multicast proxy entry

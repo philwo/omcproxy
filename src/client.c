@@ -108,7 +108,7 @@ static int client_membership_join(struct client* client,
       ++sock->groups;
       return 0;
     }
-    if (errno != ENOBUFS) {
+    if (errno != ENOBUFS && errno != ENOMEM) {
       return -errno;
     }
   }

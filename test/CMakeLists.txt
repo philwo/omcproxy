@@ -106,7 +106,9 @@ add_test(NAME netns_igmp COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/igmp_leave_ke
 add_test(NAME netns_payload COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/payload_forwarding_test.sh)
 add_test(NAME netns_strict COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/strict_querier_test.sh)
 add_test(NAME netns_two_proxy COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/two_proxy_test.sh)
-set_tests_properties(netns_mld netns_igmp netns_payload netns_strict netns_two_proxy PROPERTIES
+add_test(NAME netns_membership_limit COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/membership_limit_test.sh)
+add_test(NAME netns_membership_limit6 COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/netns/membership_limit6_test.sh)
+set_tests_properties(netns_mld netns_igmp netns_payload netns_strict netns_two_proxy netns_membership_limit netns_membership_limit6 PROPERTIES
   LABELS netns
   ENVIRONMENT "OMCPROXY=$<TARGET_FILE:omcproxy>"
   TIMEOUT 180

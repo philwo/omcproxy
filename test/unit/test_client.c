@@ -14,6 +14,7 @@
 #define MAX_FDS 64
 
 static int sock_capacity;
+static int join_fail_errno;
 static int fd_joins[MAX_FDS];
 static int socket_calls;
 static int socket_fail_call;
@@ -70,7 +71,7 @@ int __wrap_setsockopt(int fd,
   if (optname == MCAST_JOIN_GROUP) {
     ++join_calls;
     if (fd_joins[idx] >= sock_capacity) {
-      errno = ENOBUFS;
+      errno = join_fail_errno;
       return -1;
     }
     ++fd_joins[idx];
@@ -116,6 +117,7 @@ static int total_joins(void) {
 static void setup(void) {
   memset(fd_joins, 0, sizeof(fd_joins));
   sock_capacity = 1000;
+  join_fail_errno = ENOBUFS;
   socket_calls = 0;
   socket_fail_call = 0;
   close_calls = 0;
@@ -128,22 +130,6 @@ static void setup(void) {
   msfilter_last_optlen = 0;
   msfilter_last_numsrc = 0;
   CHECK(client_init(&c, 7) == 0);
-}
-
-static void test_second_socket_failure_closes_first_socket(void) {
-  memset(fd_joins, 0, sizeof(fd_joins));
-  socket_calls = 0;
-  socket_fail_call = 2;
-  close_calls = 0;
-  last_closed_fd = -1;
-  int first_fd = next_fd;
-  struct client client;
-
-  CHECK(client_init(&client, 7) == -EMFILE);
-  CHECK(close_calls == 1);
-  CHECK(last_closed_fd == first_fd);
-
-  socket_fail_call = 0;
 }
 
 static void teardown(void) {
@@ -207,6 +193,29 @@ static void test_socket_pool_grows_on_enobufs(void) {
   struct in6_addr g1 = addr6("ff0e::11");
   struct in6_addr g2 = addr6("ff0e::12");
   struct in6_addr g3 = addr6("ff0e::13");
+
+  int sockets = socket_calls;
+  client_set(&c, &g1, false, NULL, 0);
+  client_set(&c, &g2, false, NULL, 0);
+  client_set(&c, &g3, false, NULL, 0);
+  CHECK(total_joins() == 3);
+  CHECK(socket_calls == sockets + 1);
+
+  client_set(&c, &g1, true, NULL, 0);
+  client_set(&c, &g2, true, NULL, 0);
+  client_set(&c, &g3, true, NULL, 0);
+  CHECK(total_joins() == 0);
+
+  teardown();
+}
+
+static void test_socket_pool_grows_on_enomem(void) {
+  setup();
+  sock_capacity = 2;
+  join_fail_errno = ENOMEM;
+  struct in6_addr g1 = addr6("ff0e::21");
+  struct in6_addr g2 = addr6("ff0e::22");
+  struct in6_addr g3 = addr6("ff0e::23");
 
   int sockets = socket_calls;
   client_set(&c, &g1, false, NULL, 0);
@@ -328,12 +337,28 @@ static void test_join_failure_retries(void) {
   teardown();
 }
 
+static void test_second_socket_failure_closes_first_socket(void) {
+  socket_calls = 0;
+  socket_fail_call = 2;
+  close_calls = 0;
+  last_closed_fd = -1;
+  int first_fd = next_fd;
+  struct client client;
+
+  CHECK(client_init(&client, 7) == -EMFILE);
+  CHECK(close_calls == 1);
+  CHECK(last_closed_fd == first_fd);
+
+  socket_fail_call = 0;
+}
+
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
   test_idempotent_set_makes_no_syscalls();
   test_filter_change_keeps_membership();
   test_leave_on_empty_include();
   test_socket_pool_grows_on_enobufs();
+  test_socket_pool_grows_on_enomem();
   test_unrelated_updates_keep_retry_deadline();
   test_msfilter_uses_group_filter_size();
   test_msfilter_widening_failure_fails_open();
