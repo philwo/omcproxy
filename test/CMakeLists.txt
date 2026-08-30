@@ -23,7 +23,7 @@ add_executable(test_groups
   ${CMAKE_SOURCE_DIR}/src/groups.c
 )
 target_include_directories(test_groups PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
-target_link_libraries(test_groups PRIVATE omcproxy_build omcproxy_warnings ${libubox})
+target_link_libraries(test_groups PRIVATE omcproxy_build omcproxy_warnings)
 add_test(NAME groups COMMAND test_groups)
 
 add_executable(test_gmp
@@ -36,7 +36,7 @@ add_executable(test_gmp
   ${CMAKE_SOURCE_DIR}/src/querier.c
 )
 target_include_directories(test_gmp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
-target_link_libraries(test_gmp PRIVATE omcproxy_build omcproxy_warnings ${libubox})
+target_link_libraries(test_gmp PRIVATE omcproxy_build omcproxy_warnings)
 add_test(NAME gmp COMMAND test_gmp)
 
 if(OMCPROXY_FUZZ)
@@ -50,7 +50,7 @@ if(OMCPROXY_FUZZ)
     ${CMAKE_SOURCE_DIR}/src/querier.c
   )
   target_include_directories(fuzz_gmp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
-  target_link_libraries(fuzz_gmp PRIVATE omcproxy_build omcproxy_warnings ${libubox})
+  target_link_libraries(fuzz_gmp PRIVATE omcproxy_build omcproxy_warnings)
   target_compile_options(fuzz_gmp PRIVATE -fsanitize=fuzzer)
   target_link_options(fuzz_gmp PRIVATE -fsanitize=fuzzer)
 endif()

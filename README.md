@@ -28,9 +28,14 @@ deliberate limitation: the target use case is receiving multicast services
 (such as IPTV) from an upstream network, where the upstream provider drops
 customer-originated multicast anyway.
 
+## Changes in this fork
+
+- C23, no external dependencies (libubox is replaced by a small epoll and
+  timerfd event loop and a vendored intrusive list header)
+
 ## Building
 
-CMake 3.21+, Ninja, and a system installation of libubox are required.
+CMake 3.21+ and Ninja are required.
 
 ```sh
 cmake --preset default

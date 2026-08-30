@@ -32,8 +32,6 @@ if(OMCPROXY_WERROR)
   target_compile_options(omcproxy_warnings INTERFACE -Werror)
 endif()
 
-find_library(libubox ubox REQUIRED)
-
 add_library(omcproxy_core OBJECT
   src/client.c
   src/config.c
@@ -48,7 +46,7 @@ add_library(omcproxy_core OBJECT
 target_link_libraries(omcproxy_core PRIVATE omcproxy_build omcproxy_warnings)
 
 add_executable(omcproxy src/omcproxy.c)
-target_link_libraries(omcproxy PRIVATE omcproxy_build omcproxy_warnings omcproxy_core ${libubox})
+target_link_libraries(omcproxy PRIVATE omcproxy_build omcproxy_warnings omcproxy_core)
 
 install(TARGETS omcproxy DESTINATION sbin)
 
