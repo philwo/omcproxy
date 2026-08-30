@@ -156,12 +156,10 @@ static int client_membership_filter(struct client* client,
                                     struct client_membership* m) {
   int family = client_family(&m->group);
   int sol = (family == AF_INET) ? SOL_IP : SOL_IPV6;
-  size_t len =
-      sizeof(struct group_filter) + m->cnt * sizeof(struct sockaddr_storage);
+  size_t len = GROUP_FILTER_SIZE(m->cnt);
   union {
     struct group_filter f;
-    uint8_t buf[sizeof(struct group_filter) +
-                CLIENT_MAX_SOURCES * sizeof(struct sockaddr_storage)];
+    uint8_t buf[GROUP_FILTER_SIZE(CLIENT_MAX_SOURCES)];
   } fu;
   struct group_filter* filter = &fu.f;
 

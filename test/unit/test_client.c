@@ -24,6 +24,8 @@ static int leave_calls;
 static int msfilter_calls;
 static int msfilter_fail_count;
 static int msfilter_fail_errno;
+static socklen_t msfilter_last_optlen;
+static uint32_t msfilter_last_numsrc;
 static int next_fd = BASE_FD;
 
 int __wrap_socket(int domain, int type, int protocol);
@@ -58,8 +60,6 @@ int __wrap_setsockopt(int fd,
                       const void* optval,
                       socklen_t optlen) {
   (void)level;
-  (void)optval;
-  (void)optlen;
   int idx = fd - BASE_FD;
   if (idx < 0 || idx >= MAX_FDS) {
     CHECK(false);
@@ -85,6 +85,8 @@ int __wrap_setsockopt(int fd,
   }
   if (optname == MCAST_MSFILTER) {
     ++msfilter_calls;
+    msfilter_last_optlen = optlen;
+    msfilter_last_numsrc = ((const struct group_filter*)optval)->gf_numsrc;
     if (msfilter_fail_count != 0) {
       --msfilter_fail_count;
       errno = msfilter_fail_errno;
@@ -123,6 +125,8 @@ static void setup(void) {
   msfilter_calls = 0;
   msfilter_fail_count = 0;
   msfilter_fail_errno = EINVAL;
+  msfilter_last_optlen = 0;
+  msfilter_last_numsrc = 0;
   CHECK(client_init(&c, 7) == 0);
 }
 
@@ -219,6 +223,26 @@ static void test_socket_pool_grows_on_enobufs(void) {
   teardown();
 }
 
+static void test_msfilter_uses_group_filter_size(void) {
+  setup();
+  struct in6_addr grp = addr6("ff3e::1");
+  struct in6_addr srcs[2] = {addr6("2001:db8::1"), addr6("2001:db8::2")};
+
+  client_set(&c, &grp, true, srcs, 1);
+  CHECK(msfilter_last_optlen == GROUP_FILTER_SIZE(1));
+  CHECK(msfilter_last_numsrc == 1);
+
+  client_set(&c, &grp, true, srcs, 2);
+  CHECK(msfilter_last_optlen == GROUP_FILTER_SIZE(2));
+  CHECK(msfilter_last_numsrc == 2);
+
+  client_set(&c, &grp, false, NULL, 0);
+  CHECK(msfilter_last_optlen == GROUP_FILTER_SIZE(0));
+  CHECK(msfilter_last_numsrc == 0);
+
+  teardown();
+}
+
 static void test_msfilter_failure_keeps_join_and_retries(void) {
   setup();
   struct in6_addr grp = addr6("ff3e::99");
@@ -262,6 +286,7 @@ int main(void) {
   test_filter_change_keeps_membership();
   test_leave_on_empty_include();
   test_socket_pool_grows_on_enobufs();
+  test_msfilter_uses_group_filter_size();
   test_msfilter_failure_keeps_join_and_retries();
   test_join_failure_retries();
   test_second_socket_failure_closes_first_socket();
