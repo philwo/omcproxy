@@ -34,6 +34,8 @@ struct stub_msg {
 
 static struct mfc_entry mfc_table[MAX_MFC];
 static int mfc_ops;
+static int add_mfc_fail_count;
+static int add_mfc_fail_errno;
 static int mrt_assert_val;
 static int mrt6_assert_val;
 static int mrt_pim_val;
@@ -175,6 +177,11 @@ int __wrap_setsockopt(int fd,
     const struct mfcctl* ctl = optval;
     struct in6_addr group = map4(ctl->mfcc_mcastgrp);
     struct in6_addr source = map4(ctl->mfcc_origin);
+    if (optname == MRT_ADD_MFC && add_mfc_fail_count != 0) {
+      --add_mfc_fail_count;
+      errno = add_mfc_fail_errno;
+      return -1;
+    }
     ++mfc_ops;
     if (optname == MRT_DEL_MFC) {
       mfc_del(&group, &source);
@@ -191,6 +198,11 @@ int __wrap_setsockopt(int fd,
              (optname == MRT6_ADD_MFC || optname == MRT6_DEL_MFC)) {
     CHECK(optlen == sizeof(struct mf6cctl));
     const struct mf6cctl* ctl = optval;
+    if (optname == MRT6_ADD_MFC && add_mfc_fail_count != 0) {
+      --add_mfc_fail_count;
+      errno = add_mfc_fail_errno;
+      return -1;
+    }
     ++mfc_ops;
     if (optname == MRT6_DEL_MFC) {
       mfc_del(&ctl->mf6cc_mcastgrp.sin6_addr, &ctl->mf6cc_origin.sin6_addr);
@@ -277,6 +289,8 @@ static void setup(void) {
   CHECK(mrib_attach_user(&downlink, 201, NULL) == 0);
   CHECK(stub_fd_count == 2);
   mfc_ops = 0;
+  add_mfc_fail_count = 0;
+  add_mfc_fail_errno = ENOBUFS;
 }
 
 static void teardown(void) {
@@ -346,6 +360,76 @@ static void test_wrongvif_from_downlink_keeps_parent(void) {
   if (e) {
     CHECK(e->parent == 0);
   }
+
+  teardown();
+}
+
+static void test_wrongvif_reparent_failure_keeps_owner(void) {
+  setup();
+  struct in6_addr group = addr6("::ffff:239.4.4.4");
+  struct in6_addr source = addr6("::ffff:10.0.4.2");
+
+  inject_mrt(IGMPMSG_NOCACHE, 1, "10.0.4.2", "239.4.4.4");
+  struct mfc_entry* e = mfc_find(&group, &source);
+  CHECK(e != NULL);
+  if (e) {
+    CHECK(e->parent == 1);
+  }
+
+  add_mfc_fail_count = 1;
+  inject_mrt(IGMPMSG_WRONGVIF, 0, "10.0.4.2", "239.4.4.4");
+  e = mfc_find(&group, &source);
+  CHECK(e != NULL);
+  if (e) {
+    CHECK(e->parent == 1);
+  }
+
+  inject_mrt(IGMPMSG_WRONGVIF, 0, "10.0.4.2", "239.4.4.4");
+  e = mfc_find(&group, &source);
+  CHECK(e != NULL);
+  if (e) {
+    CHECK(e->parent == 0);
+    CHECK(e->oifs == mrib_filter_bit(1));
+  }
+
+  teardown();
+}
+
+static void test_nocache_program_failure_leaves_no_state(void) {
+  setup();
+  struct in6_addr group = addr6("::ffff:239.5.5.5");
+  struct in6_addr source = addr6("::ffff:10.0.5.2");
+
+  add_mfc_fail_count = 1;
+  inject_mrt(IGMPMSG_NOCACHE, 0, "10.0.5.2", "239.5.5.5");
+  CHECK(mfc_find(&group, &source) == NULL);
+  int ops = mfc_ops;
+  stub_advance((MRIB_DEFAULT_LIFETIME + 1) * OMGP_TIME_PER_SECOND);
+  CHECK(mfc_ops == ops);
+
+  inject_mrt(IGMPMSG_NOCACHE, 0, "10.0.5.2", "239.5.5.5");
+  struct mfc_entry* e = mfc_find(&group, &source);
+  CHECK(e != NULL);
+  if (e) {
+    CHECK(e->parent == 0);
+  }
+
+  teardown();
+}
+
+static void test_repeated_nocache_keeps_single_route(void) {
+  setup();
+  struct in6_addr group = addr6("::ffff:239.6.6.6");
+  struct in6_addr source = addr6("::ffff:10.0.6.2");
+
+  inject_mrt(IGMPMSG_NOCACHE, 0, "10.0.6.2", "239.6.6.6");
+  int ops = mfc_ops;
+  inject_mrt(IGMPMSG_NOCACHE, 0, "10.0.6.2", "239.6.6.6");
+  CHECK(mfc_ops == ops + 1);
+
+  stub_advance((MRIB_DEFAULT_LIFETIME + 1) * OMGP_TIME_PER_SECOND);
+  CHECK(mfc_ops == ops + 2);
+  CHECK(mfc_find(&group, &source) == NULL);
 
   teardown();
 }
@@ -489,6 +573,9 @@ int main(void) {
   test_interface_setup_rolls_back_ipv4();
   test_wrongvif_from_uplink_reparents();
   test_wrongvif_from_downlink_keeps_parent();
+  test_wrongvif_reparent_failure_keeps_owner();
+  test_nocache_program_failure_leaves_no_state();
+  test_repeated_nocache_keeps_single_route();
   test_wrongvif_for_untracked_route_is_ignored();
   test_wrongvif_between_uplinks_keeps_parent();
   test_reparented_route_expires_from_new_parent();

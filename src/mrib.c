@@ -201,9 +201,9 @@ static size_t mrib_find(int ifindex) {
 }
 
 // Recompute the output interfaces for a route and (re)install it in the kernel
-static void mrib_program_route(struct mrib_iface* iface,
-                               const struct in6_addr* group,
-                               const struct in6_addr* source) {
+static int mrib_program_route(struct mrib_iface* iface,
+                              const struct in6_addr* group,
+                              const struct in6_addr* source) {
   mrib_filter filter = 0;
   struct mrib_user* user;
   list_for_each_entry (user, &iface->users, head) {
@@ -212,7 +212,7 @@ static void mrib_program_route(struct mrib_iface* iface,
     }
   }
 
-  mrib_set(group, source, iface, filter, 0);
+  return mrib_set(group, source, iface, filter, 0);
 }
 
 // Notify all users of a new multicast source
@@ -226,20 +226,35 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
   L_DEBUG("%s: detected new multicast source %s for %s on %d", __FUNCTION__,
           sourcebuf, groupbuf, iface->ifindex);
 
-  struct mrib_route* route = malloc(sizeof(*route));
-  if (route) {
-    route->group = *group;
-    route->source = *source;
-    route->valid_until =
-        omgp_time() + MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND;
-
-    if (list_empty(&iface->routes)) {
-      ev_timer_set(&iface->timer, MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND);
+  struct mrib_route* c;
+  list_for_each_entry (c, &iface->routes, head) {
+    if (IN6_ARE_ADDR_EQUAL(&c->group, group) &&
+        IN6_ARE_ADDR_EQUAL(&c->source, source)) {
+      mrib_program_route(iface, group, source);
+      return;
     }
-
-    list_add_tail(&route->head, &iface->routes);
-    mrib_program_route(iface, group, source);
   }
+
+  struct mrib_route* route = malloc(sizeof(*route));
+  if (!route) {
+    return;
+  }
+
+  route->group = *group;
+  route->source = *source;
+  route->valid_until =
+      omgp_time() + MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND;
+
+  if (mrib_program_route(iface, group, source)) {
+    free(route);
+    return;
+  }
+
+  if (list_empty(&iface->routes)) {
+    ev_timer_set(&iface->timer, MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND);
+  }
+
+  list_add_tail(&route->head, &iface->routes);
 }
 
 // Test if an interface can be the parent of routes (i.e. is a proxy uplink)
@@ -296,6 +311,12 @@ static void mrib_wrong_parent(struct mrib_iface* arrival,
   L_DEBUG("%s: moving parent of %s from %s to %d (was %d)", __FUNCTION__,
           groupbuf, sourcebuf, arrival->ifindex, owner->ifindex);
 
+  if (mrib_program_route(arrival, group, source)) {
+    L_WARN("%s: failed to reprogram %s from %s on %d, keeping parent %d",
+           __FUNCTION__, groupbuf, sourcebuf, arrival->ifindex, owner->ifindex);
+    return;
+  }
+
   list_del(&route->head);
   route->valid_until =
       omgp_time() + MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND;
@@ -303,7 +324,6 @@ static void mrib_wrong_parent(struct mrib_iface* arrival,
     ev_timer_set(&arrival->timer, MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND);
   }
   list_add_tail(&route->head, &arrival->routes);
-  mrib_program_route(arrival, group, source);
 }
 
 // Re-evaluate output interfaces of a group's routes after a membership change
