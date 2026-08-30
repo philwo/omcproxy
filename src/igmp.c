@@ -53,14 +53,15 @@ static ssize_t igmp_handle_record(struct groups* groups,
 
   if (r->grec_type >= UPDATE_IS_INCLUDE && r->grec_type <= UPDATE_BLOCK &&
       igmp_is_valid_group(r->grec_mca)) {
-    struct in6_addr addr, sources[nsrc];
+    struct in6_addr addr, sources[nsrc ? nsrc : 1];
     querier_map(&addr, r->grec_mca);
 
     for (size_t i = 0; i < nsrc; ++i) {
       querier_map(&sources[i], r->grec_src[i]);
     }
 
-    groups_update_state(groups, &addr, sources, nsrc, r->grec_type);
+    groups_update_state(groups, &addr, nsrc ? sources : NULL, nsrc,
+                        r->grec_type);
   }
 
   return read;
@@ -124,12 +125,12 @@ void igmp_handle(struct mrib_querier* mrib,
     }
 
     if (!suppress && query->group) {
-      struct in6_addr sources[nsrc];
+      struct in6_addr sources[nsrc ? nsrc : 1];
       for (size_t i = 0; i < nsrc; ++i) {
         querier_map(&sources[i], query->srcs[i]);
       }
 
-      groups_update_timers(&q->groups, &group, sources, nsrc);
+      groups_update_timers(&q->groups, &group, nsrc ? sources : NULL, nsrc);
     }
 
     int election = memcmp(&from->sin_addr, &addr, sizeof(from->sin_addr));

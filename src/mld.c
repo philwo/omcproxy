@@ -71,7 +71,8 @@ static ssize_t mld_handle_record(struct groups* groups,
 
   if (r->type >= UPDATE_IS_INCLUDE && r->type <= UPDATE_BLOCK &&
       mld_is_valid_group(&r->addr)) {
-    groups_update_state(groups, &r->addr, r->sources, nsrc, r->type);
+    groups_update_state(groups, &r->addr, nsrc ? r->sources : NULL, nsrc,
+                        r->type);
   }
 
   return read;
