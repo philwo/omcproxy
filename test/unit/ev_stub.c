@@ -3,7 +3,6 @@
 omgp_time_t stub_now = INT64_C(1) << 20;
 struct ev_fd* stub_fds[STUB_MAX_FDS];
 size_t stub_fd_count;
-size_t stub_timer_set_calls;
 
 static LIST_HEAD(stub_timers);
 
@@ -44,7 +43,6 @@ void ev_timer_cancel(struct ev_timer* timer) {
 }
 
 void ev_timer_set(struct ev_timer* timer, omgp_time_t msecs) {
-  ++stub_timer_set_calls;
   ev_timer_cancel(timer);
   timer->deadline = stub_now + msecs;
 

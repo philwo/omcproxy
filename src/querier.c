@@ -62,7 +62,6 @@ static void querier_announce_change(struct groups* groups,
   struct querier_iface* iface =
       container_of(groups, struct querier_iface, groups);
 
-  // Only recognize changes to non-link-local groups
   struct querier_user_iface* user;
   list_for_each_entry (user, &iface->users, head) {
     querier_announce_iface(user, now, group, true);
@@ -80,16 +79,32 @@ static enum groups_query_result querier_send_query(
   char addrbuf[ADDR_BUFLEN];
   addr_ntop(addrbuf, sizeof(addrbuf), group);
 
+  enum gmp_family family = IN6_IS_ADDR_V4MAPPED(group) ? GMP_IGMP : GMP_MLD;
+  if (iface->proto[family].other_querier) {
+    L_DEBUG("%s: not querier, skipping %s-specific query for %s on %d",
+            __FUNCTION__, (!sources) ? "group" : "source", addrbuf,
+            iface->ifindex);
+    return GROUPS_QUERY_SKIPPED;
+  }
+
   L_DEBUG("%s: sending %s-specific query for %s on %d (S: %d)", __FUNCTION__,
           (!sources) ? "group" : "source", addrbuf, iface->ifindex, suppress);
 
-  enum gmp_family family = IN6_IS_ADDR_V4MAPPED(group) ? GMP_IGMP : GMP_MLD;
-  if (iface->proto[family].other_querier) {
-    return GROUPS_QUERY_SKIPPED;
-  }
   return (gmp_send_query(iface, family, group, sources, suppress) == 0)
              ? GROUPS_QUERY_SENT
              : GROUPS_QUERY_FAILED;
+}
+
+// Re-announce all groups to all users (called after querier election changes)
+void querier_refresh(struct querier_iface* iface) {
+  omgp_time_t now = omgp_time();
+  struct querier_user_iface* user;
+  list_for_each_entry (user, &iface->users, head) {
+    struct group* group;
+    groups_for_each_group (group, &iface->groups) {
+      querier_announce_iface(user, now, group, true);
+    }
+  }
 }
 
 // Expire interface timers and send queries (called by timer as callback)
@@ -98,6 +113,7 @@ static void querier_iface_timer(struct ev_timer* timeout) {
       container_of(timeout, struct querier_iface, timeout);
   omgp_time_t now = omgp_time();
   omgp_time_t next_event = now + 3600 * OMGP_TIME_PER_SECOND;
+  bool election_changed = false;
 
   for (enum gmp_family family = GMP_IGMP; family <= GMP_MLD; ++family) {
     struct querier_proto* p = &iface->proto[family];
@@ -109,6 +125,7 @@ static void querier_iface_timer(struct ev_timer* timeout) {
       if (p->other_querier) {
         *cfg = iface->cfg;
         p->other_querier = false;
+        election_changed = true;
       }
 
       int sent = gmp_send_query(iface, family, NULL, NULL, false);
@@ -126,6 +143,10 @@ static void querier_iface_timer(struct ev_timer* timeout) {
     if (p->next_query < next_event) {
       next_event = p->next_query;
     }
+  }
+
+  if (election_changed) {
+    querier_refresh(iface);
   }
 
   ev_timer_set(&iface->timeout, (next_event > now) ? next_event - now : 0);

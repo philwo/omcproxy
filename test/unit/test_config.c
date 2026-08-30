@@ -32,6 +32,16 @@ static void test_scope_before_interfaces(void) {
   CHECK(cfg.flags == PROXY_SITELOCAL);
 }
 
+static void test_strict_option(void) {
+  char spec[] = "eth1,eth2,strict,scope=site";
+  struct proxy_config cfg;
+  CHECK(config_parse_proxy(spec, &cfg) == 0);
+  CHECK(strcmp(cfg.uplink, "eth1") == 0);
+  CHECK(cfg.downlink_count == 1);
+  CHECK(strcmp(cfg.downlinks[0], "eth2") == 0);
+  CHECK(cfg.flags == (PROXY_SITELOCAL | PROXY_FLAG_STRICT));
+}
+
 static void test_uplink_only(void) {
   char spec[] = "eth1";
   struct proxy_config cfg;
@@ -75,6 +85,7 @@ int main(void) {
   test_uplink_and_downlinks();
   test_scope_option();
   test_scope_before_interfaces();
+  test_strict_option();
   test_uplink_only();
   test_invalid_scope();
   test_missing_uplink();

@@ -1,6 +1,4 @@
 #include <arpa/inet.h>
-#include <errno.h>
-#include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
 
@@ -15,18 +13,6 @@
 static struct querier_iface q;
 
 static _Alignas(16) uint8_t pkt[2048];
-static bool fail_calloc;
-
-void* __real_calloc(size_t count, size_t size);
-
-void* __wrap_calloc(size_t count, size_t size) {
-  if (fail_calloc) {
-    fail_calloc = false;
-    errno = ENOMEM;
-    return NULL;
-  }
-  return __real_calloc(count, size);
-}
 
 static struct in6_addr addr(const char* s) {
   struct in6_addr a;
@@ -56,7 +42,6 @@ static void setup(void) {
   q.cfg = q.groups.cfg_v6;
   stub_igmp_source.s_addr = addr4("192.168.1.1");
   stub_mld_source = addr("fe80::1");
-  stub_mrib_attach_error = 0;
   stub_sent_len = 0;
   stub_sent_family = 0;
 }
@@ -276,7 +261,9 @@ static void test_igmp_query_suppress_respected(void) {
 
   igmp_input(
       build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.8.8.8"), NULL, 0));
-  igmp_input(build_igmp_query(pkt, addr4("239.8.8.8"), NULL, 0, true));
+  size_t len = build_igmp_query(pkt, addr4("239.8.8.8"), NULL, 0, true);
+  pkt[1] = 10;
+  igmp_input(len);
   stub_advance(3 * OMGP_TIME_PER_SECOND);
   CHECK(groups_get(&q.groups, &grp) != NULL);
 
@@ -478,6 +465,159 @@ static void test_mld_send_source_specific_query(void) {
   CHECK(stub_sent[26] == 0 && stub_sent[27] == 2);
   CHECK(memcmp(&stub_sent[28], &s1.addr, 16) == 0);
   CHECK(memcmp(&stub_sent[44], &s2.addr, 16) == 0);
+
+  teardown();
+}
+
+static int announce_calls;
+
+static void announce_cb(struct querier_user_iface* user,
+                        const struct in6_addr* group,
+                        bool include,
+                        const struct in6_addr* sources,
+                        size_t len) {
+  (void)user;
+  (void)group;
+  (void)include;
+  (void)sources;
+  (void)len;
+  ++announce_calls;
+}
+
+static void test_election_change_reannounces_groups(void) {
+  setup();
+  struct querier_user_iface user = {.user_cb = announce_cb, .iface = &q};
+  list_add(&user.head, &q.users);
+
+  igmp_input(
+      build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.9.9.9"), NULL, 0));
+  announce_calls = 0;
+
+  size_t len = build_igmp_query(pkt, 0, NULL, 0, false);
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(q.proto[GMP_IGMP].other_querier);
+  CHECK(announce_calls == 1);
+
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(announce_calls == 1);
+
+  list_del(&user.head);
+  teardown();
+}
+
+static void test_igmp_legacy_and_exclude_ssm_ignored(void) {
+  setup();
+  struct in6_addr grp;
+  addr_map(&grp, addr4("232.44.44.44"));
+
+  memset(pkt, 0, 8);
+  pkt[0] = 0x16;
+  in_addr_t a = addr4("232.44.44.44");
+  memcpy(&pkt[4], &a, 4);
+  igmp_input(8);
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  igmp_input(build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("232.44.44.44"),
+                               NULL, 0));
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  teardown();
+}
+
+static void test_mld_legacy_and_exclude_ssm_ignored(void) {
+  setup();
+  struct in6_addr grp = addr("ff35::4444");
+
+  memset(pkt, 0, 24);
+  pkt[0] = 131;
+  memcpy(&pkt[8], &grp, 16);
+  mld_input(24);
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  mld_input(build_mld_report(pkt, UPDATE_TO_EX, &grp, NULL, 0));
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  teardown();
+}
+
+static void test_igmp_report_duplicates_do_not_crowd_out_sources(void) {
+  setup();
+  struct in6_addr grp;
+  struct in6_addr s1;
+  struct in6_addr s2;
+  addr_map(&grp, addr4("239.10.10.10"));
+  addr_map(&s1, addr4("10.0.1.1"));
+  addr_map(&s2, addr4("10.0.1.2"));
+
+  in_addr_t srcs[QUERIER_MAX_SOURCE + 2];
+  for (size_t i = 0; i < QUERIER_MAX_SOURCE + 1; ++i) {
+    srcs[i] = addr4("10.0.1.1");
+  }
+  srcs[QUERIER_MAX_SOURCE + 1] = addr4("10.0.1.2");
+  igmp_input(build_igmp_report(pkt, UPDATE_IS_INCLUDE, addr4("239.10.10.10"),
+                               srcs, QUERIER_MAX_SOURCE + 2));
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&q.groups, &grp, &s2, stub_now));
+
+  teardown();
+}
+
+static void test_mld_report_duplicates_do_not_crowd_out_sources(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::1010");
+  struct in6_addr s1 = addr("2001:db8::1");
+  struct in6_addr s2 = addr("2001:db8::2");
+
+  struct in6_addr srcs[QUERIER_MAX_SOURCE + 2];
+  for (size_t i = 0; i < QUERIER_MAX_SOURCE + 1; ++i) {
+    srcs[i] = s1;
+  }
+  srcs[QUERIER_MAX_SOURCE + 1] = s2;
+  mld_input(build_mld_report(pkt, UPDATE_IS_INCLUDE, &grp, srcs,
+                             QUERIER_MAX_SOURCE + 2));
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&q.groups, &grp, &s2, stub_now));
+
+  teardown();
+}
+
+static void test_igmp_leave_ssm_ignored(void) {
+  setup();
+  struct in6_addr grp;
+  struct in6_addr s1;
+  addr_map(&grp, addr4("232.44.44.44"));
+  addr_map(&s1, addr4("10.0.0.44"));
+
+  in_addr_t srcs[1] = {addr4("10.0.0.44")};
+  igmp_input(build_igmp_report(pkt, UPDATE_IS_INCLUDE, addr4("232.44.44.44"),
+                               srcs, 1));
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+
+  memset(pkt, 0, 8);
+  pkt[0] = 0x17;
+  in_addr_t a = addr4("232.44.44.44");
+  memcpy(&pkt[4], &a, 4);
+  igmp_input(8);
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+
+  teardown();
+}
+
+static void test_mld_done_ssm_ignored(void) {
+  setup();
+  struct in6_addr grp = addr("ff35::4444");
+  struct in6_addr s1 = addr("2001:db8::44");
+
+  mld_input(build_mld_report(pkt, UPDATE_IS_INCLUDE, &grp, &s1, 1));
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+
+  memset(pkt, 0, 24);
+  pkt[0] = 132;
+  memcpy(&pkt[8], &grp, 16);
+  mld_input(24);
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
 
   teardown();
 }
@@ -766,42 +906,454 @@ static void test_checksum_carry_folding(void) {
   CHECK(gmp_checksum(data, sizeof(data)) == 0);
 }
 
-static void reset_attach_stubs(void) {
-  stub_mrib_attach_error = 0;
-  stub_mrib_attach_calls = 0;
-  stub_mrib_detach_calls = 0;
-  stub_timer_set_calls = 0;
+static void test_own_address_query_ignored_for_election(void) {
+  setup();
+  size_t len = build_igmp_query(pkt, 0, NULL, 0, false);
+  pkt[8] = 7;
+  igmp_input_from(len, "192.168.1.1");
+  CHECK(!q.proto[GMP_IGMP].other_querier);
+  CHECK(q.groups.cfg_v4.robustness == 2);
+
+  len = build_mld_query(pkt, NULL, NULL, 0, false);
+  pkt[24] = 7;
+  mld_input_from(len, "fe80::1");
+  CHECK(!q.proto[GMP_MLD].other_querier);
+  CHECK(q.groups.cfg_v6.robustness == 2);
+
+  teardown();
 }
 
-static void test_querier_attach_allocation_failure(void) {
-  struct querier querier;
-  struct querier_user_iface user = {0};
-  querier_init(&querier);
-  reset_attach_stubs();
-  fail_calloc = true;
+static void test_own_address_specific_query_lowers_timers(void) {
+  setup();
+  struct in6_addr grp;
+  struct in6_addr s1;
+  addr_map(&grp, addr4("232.7.8.9"));
+  addr_map(&s1, addr4("10.0.7.8"));
 
-  CHECK(querier_attach(&user, &querier, 7, NULL) == -ENOMEM);
-  CHECK(user.iface == NULL);
-  CHECK(list_empty(&querier.ifaces));
-  CHECK(stub_mrib_attach_calls == 0);
-  CHECK(stub_timer_set_calls == 0);
-  querier_deinit(&querier);
+  in_addr_t srcs[1] = {addr4("10.0.7.8")};
+  igmp_input(
+      build_igmp_report(pkt, UPDATE_IS_INCLUDE, addr4("232.7.8.9"), srcs, 1));
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+
+  size_t len = build_igmp_query(pkt, addr4("232.7.8.9"), srcs, 1, false);
+  igmp_input_from(len, "192.168.1.1");
+  CHECK(!q.proto[GMP_IGMP].other_querier);
+
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&q.groups, &grp) != NULL);
+  stub_advance(18 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  teardown();
 }
 
-static void test_querier_attach_mrib_failure(void) {
-  struct querier querier;
-  struct querier_user_iface user = {0};
-  querier_init(&querier);
-  reset_attach_stubs();
-  stub_mrib_attach_error = -ENODEV;
+static void test_other_querier_timeout_refreshed_by_repeat_query(void) {
+  setup();
+  struct querier_user_iface user = {.user_cb = announce_cb, .iface = &q};
+  list_add(&user.head, &q.users);
+  igmp_input(build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.10.10.10"),
+                               NULL, 0));
+  announce_calls = 0;
 
-  CHECK(querier_attach(&user, &querier, 7, NULL) == -ENODEV);
-  CHECK(user.iface == NULL);
-  CHECK(list_empty(&querier.ifaces));
-  CHECK(stub_mrib_attach_calls == 1);
-  CHECK(stub_mrib_detach_calls == 0);
-  CHECK(stub_timer_set_calls == 0);
-  querier_deinit(&querier);
+  size_t len = build_igmp_query(pkt, 0, NULL, 0, false);
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(q.proto[GMP_IGMP].other_querier);
+  CHECK(announce_calls == 1);
+  omgp_time_t first = q.proto[GMP_IGMP].next_query;
+
+  stub_advance(5 * OMGP_TIME_PER_SECOND);
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(q.proto[GMP_IGMP].next_query == first + 5 * OMGP_TIME_PER_SECOND);
+  CHECK(announce_calls == 1);
+
+  list_del(&user.head);
+  teardown();
+}
+
+static void test_other_querier_expiry_restores_config(void) {
+  struct querier querier;
+  struct querier_user_iface user;
+  memset(&user, 0, sizeof(user));
+  stub_igmp_source.s_addr = addr4("192.168.1.1");
+  stub_mld_source = addr("fe80::1");
+  stub_send_result = 0;
+  stub_send_count = 0;
+
+  CHECK(querier_init(&querier) == 0);
+  CHECK(querier_attach(&user, &querier, 11, announce_cb) == 0);
+  struct querier_iface* iface = user.iface;
+
+  stub_advance(0);
+
+  struct sockaddr_in from = {.sin_family = AF_INET};
+  from.sin_addr.s_addr = addr4("192.168.1.2");
+  size_t len =
+      build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.12.12.12"), NULL, 0);
+  igmp_handle(&iface->mrib, (const struct igmphdr*)pkt, len, &from);
+
+  len = build_igmp_query(pkt, 0, NULL, 0, false);
+  pkt[8] = 3;
+  from.sin_addr.s_addr = addr4("192.168.1.0");
+  igmp_handle(&iface->mrib, (const struct igmphdr*)pkt, len, &from);
+  CHECK(iface->proto[GMP_IGMP].other_querier);
+  CHECK(iface->groups.cfg_v4.robustness == 3);
+
+  int before = announce_calls;
+  stub_advance(400000);
+  CHECK(!iface->proto[GMP_IGMP].other_querier);
+  CHECK(iface->groups.cfg_v4.robustness == 2);
+  CHECK(announce_calls > before);
+  CHECK(stub_sent_family == 4);
+  CHECK(stub_sent_len == 12);
+  CHECK(stub_sent[0] == 0x11);
+  CHECK((stub_sent[8] & 0x7) == 2);
+
+  querier_detach(&user);
+}
+
+static void test_igmp_nonquerier_skipped_group_query(void) {
+  struct querier querier;
+  struct querier_user_iface user;
+  memset(&user, 0, sizeof(user));
+  stub_igmp_source.s_addr = addr4("192.168.1.1");
+  stub_mld_source = addr("fe80::1");
+  stub_send_result = 0;
+  stub_send_count = 0;
+
+  CHECK(querier_init(&querier) == 0);
+  CHECK(querier_attach(&user, &querier, 12, announce_cb) == 0);
+  struct querier_iface* iface = user.iface;
+
+  stub_advance(0);
+
+  struct in6_addr grp;
+  addr_map(&grp, addr4("239.13.13.13"));
+  struct sockaddr_in from = {.sin_family = AF_INET};
+  from.sin_addr.s_addr = addr4("192.168.1.2");
+  size_t len =
+      build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.13.13.13"), NULL, 0);
+  igmp_handle(&iface->mrib, (const struct igmphdr*)pkt, len, &from);
+  len = build_igmp_report(pkt, UPDATE_TO_IN, addr4("239.13.13.13"), NULL, 0);
+  igmp_handle(&iface->mrib, (const struct igmphdr*)pkt, len, &from);
+
+  int sends = stub_send_count;
+  stub_advance(0);
+  CHECK(stub_send_count == sends + 1);
+
+  stub_advance(900);
+  len = build_igmp_query(pkt, addr4("239.13.13.13"), NULL, 0, false);
+  pkt[1] = 1;
+  from.sin_addr.s_addr = addr4("192.168.1.0");
+  igmp_handle(&iface->mrib, (const struct igmphdr*)pkt, len, &from);
+  CHECK(iface->proto[GMP_IGMP].other_querier);
+
+  sends = stub_send_count;
+  stub_advance(100);
+  CHECK(stub_send_count == sends);
+  stub_advance(200);
+  CHECK(stub_send_count == sends);
+  CHECK(groups_get(&iface->groups, &grp) == NULL);
+
+  querier_detach(&user);
+}
+
+static void test_mld_nonquerier_skipped_source_query(void) {
+  struct querier querier;
+  struct querier_user_iface user;
+  memset(&user, 0, sizeof(user));
+  stub_igmp_source.s_addr = addr4("192.168.1.1");
+  stub_mld_source = addr("fe80::1");
+  stub_send_result = 0;
+  stub_send_count = 0;
+
+  CHECK(querier_init(&querier) == 0);
+  CHECK(querier_attach(&user, &querier, 13, announce_cb) == 0);
+  struct querier_iface* iface = user.iface;
+
+  stub_advance(0);
+
+  struct in6_addr grp = addr("ff05::1313");
+  struct in6_addr s1 = addr("2001:db8::1313");
+  struct sockaddr_in6 from = {.sin6_family = AF_INET6};
+  from.sin6_addr = addr("fe80::2");
+  size_t len = build_mld_report(pkt, UPDATE_IS_INCLUDE, &grp, &s1, 1);
+  mld_handle(&iface->mrib, (const struct mld_hdr*)pkt, len, &from);
+  len = build_mld_report(pkt, UPDATE_BLOCK, &grp, &s1, 1);
+  mld_handle(&iface->mrib, (const struct mld_hdr*)pkt, len, &from);
+
+  int sends = stub_send_count;
+  stub_advance(0);
+  CHECK(stub_send_count == sends + 1);
+
+  stub_advance(900);
+  len = build_mld_query(pkt, &grp, &s1, 1, false);
+  from.sin6_addr = addr("fe80::");
+  mld_handle(&iface->mrib, (const struct mld_hdr*)pkt, len, &from);
+  CHECK(iface->proto[GMP_MLD].other_querier);
+
+  sends = stub_send_count;
+  stub_advance(100);
+  CHECK(stub_send_count == sends);
+  stub_advance(200);
+  CHECK(stub_send_count == sends);
+  CHECK(groups_get(&iface->groups, &grp) == NULL);
+
+  querier_detach(&user);
+}
+
+static void test_igmp_higher_address_query_deadline_wins(void) {
+  struct querier querier;
+  struct querier_user_iface user;
+  memset(&user, 0, sizeof(user));
+  stub_igmp_source.s_addr = addr4("192.168.1.1");
+  stub_mld_source = addr("fe80::1");
+  stub_send_result = 0;
+  stub_send_count = 0;
+
+  CHECK(querier_init(&querier) == 0);
+  CHECK(querier_attach(&user, &querier, 14, announce_cb) == 0);
+  struct querier_iface* iface = user.iface;
+
+  stub_advance(0);
+
+  struct in6_addr grp;
+  addr_map(&grp, addr4("239.14.14.14"));
+  struct sockaddr_in from = {.sin_family = AF_INET};
+  from.sin_addr.s_addr = addr4("192.168.1.2");
+  size_t len =
+      build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.14.14.14"), NULL, 0);
+  igmp_handle(&iface->mrib, (const struct igmphdr*)pkt, len, &from);
+  len = build_igmp_report(pkt, UPDATE_TO_IN, addr4("239.14.14.14"), NULL, 0);
+  igmp_handle(&iface->mrib, (const struct igmphdr*)pkt, len, &from);
+
+  int sends = stub_send_count;
+  stub_advance(0);
+  CHECK(stub_send_count == sends + 1);
+
+  stub_advance(900);
+  len = build_igmp_query(pkt, addr4("239.14.14.14"), NULL, 0, false);
+  pkt[1] = 1;
+  from.sin_addr.s_addr = addr4("192.168.1.9");
+  igmp_handle(&iface->mrib, (const struct igmphdr*)pkt, len, &from);
+  CHECK(!iface->proto[GMP_IGMP].other_querier);
+
+  stub_advance(150);
+  CHECK(stub_send_count == sends + 2);
+  stub_advance(100);
+  CHECK(groups_get(&iface->groups, &grp) == NULL);
+
+  querier_detach(&user);
+}
+
+static void test_mld_higher_address_query_deadline_wins(void) {
+  struct querier querier;
+  struct querier_user_iface user;
+  memset(&user, 0, sizeof(user));
+  stub_igmp_source.s_addr = addr4("192.168.1.1");
+  stub_mld_source = addr("fe80::1");
+  stub_send_result = 0;
+  stub_send_count = 0;
+
+  CHECK(querier_init(&querier) == 0);
+  CHECK(querier_attach(&user, &querier, 15, announce_cb) == 0);
+  struct querier_iface* iface = user.iface;
+
+  stub_advance(0);
+
+  struct in6_addr grp = addr("ff05::1414");
+  struct in6_addr s1 = addr("2001:db8::1414");
+  struct sockaddr_in6 from = {.sin6_family = AF_INET6};
+  from.sin6_addr = addr("fe80::2");
+  size_t len = build_mld_report(pkt, UPDATE_IS_INCLUDE, &grp, &s1, 1);
+  mld_handle(&iface->mrib, (const struct mld_hdr*)pkt, len, &from);
+  len = build_mld_report(pkt, UPDATE_BLOCK, &grp, &s1, 1);
+  mld_handle(&iface->mrib, (const struct mld_hdr*)pkt, len, &from);
+
+  int sends = stub_send_count;
+  stub_advance(0);
+  CHECK(stub_send_count == sends + 1);
+
+  stub_advance(900);
+  len = build_mld_query(pkt, &grp, &s1, 1, false);
+  from.sin6_addr = addr("fe80::9");
+  mld_handle(&iface->mrib, (const struct mld_hdr*)pkt, len, &from);
+  CHECK(!iface->proto[GMP_MLD].other_querier);
+
+  stub_advance(150);
+  CHECK(stub_send_count == sends + 2);
+  stub_advance(100);
+  CHECK(groups_get(&iface->groups, &grp) == NULL);
+
+  querier_detach(&user);
+}
+
+static void test_igmp_query_maximum_encodings(void) {
+  setup();
+  size_t len = build_igmp_query(pkt, 0, NULL, 0, false);
+  pkt[1] = 0xff;
+  pkt[8] = 7;
+  pkt[9] = 0xff;
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(q.proto[GMP_IGMP].other_querier);
+  CHECK(q.groups.cfg_v4.robustness == 7);
+  CHECK(q.groups.cfg_v4.query_interval == 31744000);
+  CHECK(q.groups.cfg_v4.query_response_interval == 3174400);
+  CHECK(q.proto[GMP_IGMP].next_query ==
+        stub_now + 3174400 / 2 + 7 * INT64_C(31744000));
+
+  len = build_igmp_query(pkt, 0, NULL, 0, false);
+  pkt[8] = 0;
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(q.groups.cfg_v4.robustness == 2);
+  CHECK(q.groups.cfg_v4.query_interval == 125000);
+
+  teardown();
+}
+
+static void test_mld_query_maximum_encodings(void) {
+  setup();
+  size_t len = build_mld_query(pkt, NULL, NULL, 0, false);
+  pkt[4] = 0xff;
+  pkt[5] = 0xff;
+  pkt[24] = 7;
+  pkt[25] = 0xff;
+  mld_input_from(len, "fe80::");
+  CHECK(q.proto[GMP_MLD].other_querier);
+  CHECK(q.groups.cfg_v6.robustness == 7);
+  CHECK(q.groups.cfg_v6.query_interval == 31744000);
+  CHECK(q.groups.cfg_v6.query_response_interval == 8387584);
+  CHECK(q.proto[GMP_MLD].next_query ==
+        stub_now + 8387584 / 2 + 7 * INT64_C(31744000));
+
+  len = build_mld_query(pkt, NULL, NULL, 0, false);
+  pkt[24] = 0;
+  mld_input_from(len, "fe80::");
+  CHECK(q.groups.cfg_v6.robustness == 2);
+  CHECK(q.groups.cfg_v6.query_interval == 125000);
+
+  teardown();
+}
+
+static void test_igmp_v1_compat_ignores_leave_and_to_in(void) {
+  setup();
+  struct in6_addr grp;
+  addr_map(&grp, addr4("239.40.40.40"));
+  in_addr_t g = addr4("239.40.40.40");
+
+  memset(pkt, 0, 8);
+  pkt[0] = 0x12;
+  memcpy(&pkt[4], &g, 4);
+  igmp_input(8);
+  CHECK(groups_includes_group(&q.groups, &grp, NULL, stub_now));
+
+  pkt[0] = 0x17;
+  igmp_input(8);
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_includes_group(&q.groups, &grp, NULL, stub_now));
+
+  igmp_input(
+      build_igmp_report(pkt, UPDATE_TO_IN, addr4("239.40.40.40"), NULL, 0));
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_includes_group(&q.groups, &grp, NULL, stub_now));
+
+  teardown();
+}
+
+static void test_igmp_v1_wins_over_v2_compat(void) {
+  setup();
+  struct in6_addr grp;
+  addr_map(&grp, addr4("239.41.41.41"));
+  in_addr_t g = addr4("239.41.41.41");
+
+  memset(pkt, 0, 8);
+  pkt[0] = 0x12;
+  memcpy(&pkt[4], &g, 4);
+  igmp_input(8);
+  pkt[0] = 0x16;
+  igmp_input(8);
+
+  pkt[0] = 0x17;
+  igmp_input(8);
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_includes_group(&q.groups, &grp, NULL, stub_now));
+
+  teardown();
+}
+
+static void test_igmp_compat_discards_to_ex_sources(void) {
+  setup();
+  struct in6_addr grp;
+  struct in6_addr s1;
+  addr_map(&grp, addr4("239.42.42.42"));
+  addr_map(&s1, addr4("10.0.42.42"));
+  in_addr_t g = addr4("239.42.42.42");
+
+  memset(pkt, 0, 8);
+  pkt[0] = 0x16;
+  memcpy(&pkt[4], &g, 4);
+  igmp_input(8);
+
+  in_addr_t srcs[1] = {addr4("10.0.42.42")};
+  igmp_input(
+      build_igmp_report(pkt, UPDATE_TO_EX, addr4("239.42.42.42"), srcs, 1));
+  const struct group* group = groups_get(&q.groups, &grp);
+  CHECK(group != NULL && group->source_count == 0);
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+
+  teardown();
+}
+
+static void test_igmp_compat_window_expires(void) {
+  setup();
+  struct in6_addr grp;
+  struct in6_addr s1;
+  addr_map(&grp, addr4("239.43.43.43"));
+  addr_map(&s1, addr4("10.0.43.43"));
+  in_addr_t g = addr4("239.43.43.43");
+  in_addr_t srcs[1] = {addr4("10.0.43.43")};
+
+  memset(pkt, 0, 8);
+  pkt[0] = 0x16;
+  memcpy(&pkt[4], &g, 4);
+  igmp_input(8);
+
+  stub_advance(250 * OMGP_TIME_PER_SECOND);
+  igmp_input(
+      build_igmp_report(pkt, UPDATE_BLOCK, addr4("239.43.43.43"), srcs, 1));
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+
+  igmp_input(build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.43.43.43"),
+                               NULL, 0));
+  stub_advance(8 * OMGP_TIME_PER_SECOND);
+  igmp_input(
+      build_igmp_report(pkt, UPDATE_BLOCK, addr4("239.43.43.43"), srcs, 1));
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(!groups_includes_group(&q.groups, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&q.groups, &grp, NULL, stub_now));
+
+  teardown();
+}
+
+static void test_mld_v1_compat_still_honors_done(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::6666");
+
+  memset(pkt, 0, 24);
+  pkt[0] = 131;
+  memcpy(&pkt[8], &grp, 16);
+  mld_input(24);
+  const struct group* group = groups_get(&q.groups, &grp);
+  CHECK(group != NULL);
+  CHECK(group != NULL && group->compat_v2_until > stub_now);
+  CHECK(group != NULL && group->compat_v1_until == 0);
+
+  pkt[0] = 132;
+  mld_input(24);
+  stub_advance(3 * OMGP_TIME_PER_SECOND);
+  CHECK(groups_get(&q.groups, &grp) == NULL);
+
+  teardown();
 }
 
 static void test_startup_tries_kept_after_send_failure(void) {
@@ -809,7 +1361,6 @@ static void test_startup_tries_kept_after_send_failure(void) {
   struct querier_user_iface user = {.user_cb = NULL};
   stub_igmp_source.s_addr = addr4("192.168.1.1");
   stub_mld_source = addr("fe80::1");
-  stub_mrib_attach_error = 0;
   stub_send_result = -1;
   stub_send_count = 0;
 
@@ -837,82 +1388,6 @@ static void test_startup_tries_kept_after_send_failure(void) {
   querier_detach(&user);
 }
 
-static void test_igmp_report_duplicates_do_not_crowd_out_sources(void) {
-  setup();
-  struct in6_addr grp;
-  struct in6_addr s1;
-  struct in6_addr s2;
-  addr_map(&grp, addr4("239.10.10.10"));
-  addr_map(&s1, addr4("10.0.1.1"));
-  addr_map(&s2, addr4("10.0.1.2"));
-
-  in_addr_t srcs[QUERIER_MAX_SOURCE + 2];
-  for (size_t i = 0; i < QUERIER_MAX_SOURCE + 1; ++i) {
-    srcs[i] = addr4("10.0.1.1");
-  }
-  srcs[QUERIER_MAX_SOURCE + 1] = addr4("10.0.1.2");
-  igmp_input(build_igmp_report(pkt, UPDATE_IS_INCLUDE, addr4("239.10.10.10"),
-                               srcs, QUERIER_MAX_SOURCE + 2));
-  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
-  CHECK(groups_includes_group(&q.groups, &grp, &s2, stub_now));
-
-  teardown();
-}
-
-static void test_igmp_legacy_and_exclude_ssm_ignored(void) {
-  setup();
-  struct in6_addr grp;
-  addr_map(&grp, addr4("232.44.44.44"));
-
-  memset(pkt, 0, 8);
-  pkt[0] = 0x16;
-  in_addr_t a = addr4("232.44.44.44");
-  memcpy(&pkt[4], &a, 4);
-  igmp_input(8);
-  CHECK(groups_get(&q.groups, &grp) == NULL);
-
-  igmp_input(build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("232.44.44.44"),
-                               NULL, 0));
-  CHECK(groups_get(&q.groups, &grp) == NULL);
-
-  teardown();
-}
-
-static void test_mld_legacy_and_exclude_ssm_ignored(void) {
-  setup();
-  struct in6_addr grp = addr("ff35::4444");
-
-  memset(pkt, 0, 24);
-  pkt[0] = 131;
-  memcpy(&pkt[8], &grp, 16);
-  mld_input(24);
-  CHECK(groups_get(&q.groups, &grp) == NULL);
-
-  mld_input(build_mld_report(pkt, UPDATE_TO_EX, &grp, NULL, 0));
-  CHECK(groups_get(&q.groups, &grp) == NULL);
-
-  teardown();
-}
-
-static void test_mld_report_duplicates_do_not_crowd_out_sources(void) {
-  setup();
-  struct in6_addr grp = addr("ff05::1010");
-  struct in6_addr s1 = addr("2001:db8::1");
-  struct in6_addr s2 = addr("2001:db8::2");
-
-  struct in6_addr srcs[QUERIER_MAX_SOURCE + 2];
-  for (size_t i = 0; i < QUERIER_MAX_SOURCE + 1; ++i) {
-    srcs[i] = s1;
-  }
-  srcs[QUERIER_MAX_SOURCE + 1] = s2;
-  mld_input(build_mld_report(pkt, UPDATE_IS_INCLUDE, &grp, srcs,
-                             QUERIER_MAX_SOURCE + 2));
-  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
-  CHECK(groups_includes_group(&q.groups, &grp, &s2, stub_now));
-
-  teardown();
-}
-
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
   test_float8_codec();
@@ -923,9 +1398,6 @@ int main(void) {
   test_checksum_even_length_self_verifies();
   test_checksum_odd_length_self_verifies();
   test_checksum_carry_folding();
-  test_querier_attach_allocation_failure();
-  test_querier_attach_mrib_failure();
-  test_startup_tries_kept_after_send_failure();
   test_igmp_report_exclude();
   test_igmp_report_include_sources();
   test_igmp_report_truncated();
@@ -955,9 +1427,28 @@ int main(void) {
   test_igmp_zero_group_with_sources_ignored();
   test_mld_zero_group_with_sources_ignored();
   test_igmp_query_source_beyond_76_processed();
-  test_igmp_report_duplicates_do_not_crowd_out_sources();
-  test_mld_report_duplicates_do_not_crowd_out_sources();
   test_igmp_legacy_and_exclude_ssm_ignored();
   test_mld_legacy_and_exclude_ssm_ignored();
+  test_igmp_report_duplicates_do_not_crowd_out_sources();
+  test_mld_report_duplicates_do_not_crowd_out_sources();
+  test_igmp_leave_ssm_ignored();
+  test_mld_done_ssm_ignored();
+  test_election_change_reannounces_groups();
+  test_startup_tries_kept_after_send_failure();
+  test_own_address_query_ignored_for_election();
+  test_own_address_specific_query_lowers_timers();
+  test_other_querier_timeout_refreshed_by_repeat_query();
+  test_other_querier_expiry_restores_config();
+  test_igmp_nonquerier_skipped_group_query();
+  test_mld_nonquerier_skipped_source_query();
+  test_igmp_higher_address_query_deadline_wins();
+  test_mld_higher_address_query_deadline_wins();
+  test_igmp_query_maximum_encodings();
+  test_mld_query_maximum_encodings();
+  test_igmp_v1_compat_ignores_leave_and_to_in();
+  test_igmp_v1_wins_over_v2_compat();
+  test_igmp_compat_discards_to_ex_sources();
+  test_igmp_compat_window_expires();
+  test_mld_v1_compat_still_honors_done();
   return test_result();
 }

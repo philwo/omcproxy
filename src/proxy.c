@@ -79,14 +79,21 @@ static void proxy_mrib(struct mrib_user* mrib,
     return;
   }
 
+  enum gmp_family family = IN6_IS_ADDR_V4MAPPED(group) ? GMP_IGMP : GMP_MLD;
   omgp_time_t now = omgp_time();
   struct querier_user* user;
   list_for_each_entry (user, &proxy->querier.ifaces, head) {
+    struct querier_user_iface* iface =
+        container_of(user, struct querier_user_iface, user);
+    struct proxy_downlink* downlink =
+        container_of(iface, struct proxy_downlink, iface);
+
+    if ((downlink->flags & PROXY_FLAG_STRICT) &&
+        iface->iface->proto[family].other_querier) {
+      continue;
+    }
+
     if (groups_includes_group(user->groups, group, source, now)) {
-      struct querier_user_iface* iface =
-          container_of(user, struct querier_user_iface, user);
-      struct proxy_downlink* downlink =
-          container_of(iface, struct proxy_downlink, iface);
       mrib_filter_add(filter, &downlink->mrib);
     }
   }
@@ -102,6 +109,8 @@ static void proxy_trigger(struct querier_user_iface* user,
       container_of(user, struct proxy_downlink, iface);
   if (proxy_match_scope(iface->flags, group)) {
     client_set(&iface->client, group, include, sources, len);
+
+    // Reconcile oifs of routes whose data raced ahead of this join
     struct proxy* proxy =
         container_of(user->user.querier, struct proxy, querier);
     mrib_refresh(&proxy->mrib, group);
@@ -115,9 +124,9 @@ static void proxy_unset(struct proxy* proxy) {
   struct querier_user* user;
   struct querier_user* n;
   list_for_each_entry_safe (user, n, &proxy->querier.ifaces, head) {
-    struct querier_user_iface* iface =
+    struct querier_user_iface* i =
         container_of(user, struct querier_user_iface, user);
-    proxy_remove_downlink(container_of(iface, struct proxy_downlink, iface));
+    proxy_remove_downlink(container_of(i, struct proxy_downlink, iface));
   }
 
   querier_deinit(&proxy->querier);
@@ -134,6 +143,10 @@ int proxy_set(int uplink,
     return -E2BIG;
   }
 
+  if ((flags & PROXY_SCOPE_MASK) == 0) {
+    flags |= PROXY_GLOBAL;
+  }
+
   struct proxy* proxy = NULL;
   struct proxy* p;
   list_for_each_entry (p, &proxies, head) {
@@ -142,8 +155,7 @@ int proxy_set(int uplink,
     }
   }
 
-  if (proxy && (downlinks_cnt == 0 || ((proxy->flags & PROXY_SCOPE_MASK) !=
-                                       (flags & PROXY_SCOPE_MASK)))) {
+  if (proxy && (downlinks_cnt == 0 || proxy->flags != flags)) {
     proxy_unset(proxy);
     proxy = NULL;
   }
@@ -161,10 +173,6 @@ int proxy_set(int uplink,
       return -ENOMEM;
     }
     created = true;
-
-    if ((flags & PROXY_SCOPE_MASK) == 0) {
-      flags |= PROXY_GLOBAL;
-    }
 
     proxy->flags = flags;
     proxy->ifindex = uplink;

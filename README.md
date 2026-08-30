@@ -48,7 +48,18 @@ cmake --preset default
 cmake --build --preset default
 ```
 
-The binary lands in `build/omcproxy`.
+The binary lands in `build/omcproxy`. Run it as root with one or more proxy
+specs, first interface is the upstream:
+
+```sh
+omcproxy [-v] <uplink>,<downlink>[,<downlink>...][,scope=<scope>][,strict]
+```
+
+With `strict`, a downstream interface only receives forwarded traffic while
+this proxy is the elected IGMP/MLD querier on it, as RFC 4605 suggests for
+LANs with more than one proxy. The default is to keep forwarding even after
+losing the election, which is the safe choice when another device (such as a
+snooping switch) sends queries but does not forward multicast itself.
 
 ## Testing
 

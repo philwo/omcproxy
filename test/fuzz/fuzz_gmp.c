@@ -3,6 +3,8 @@
 #include <string.h>
 #include <syslog.h>
 
+#include "src/addr.h"
+#include "src/gmp.h"
 #include "src/querier.h"
 
 #include "ev_stub.h"
@@ -26,7 +28,6 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     groups_init(&q.groups);
     q.groups.source_limit = QUERIER_MAX_SOURCE;
     q.groups.group_limit = QUERIER_MAX_GROUPS;
-    q.cfg = q.groups.cfg_v6;
     stub_igmp_source.s_addr = htobe32(0xc0a80101);
     inet_pton(AF_INET6, "fe80::1", &stub_mld_source);
     initialized = true;

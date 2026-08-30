@@ -34,6 +34,9 @@ enum proxy_flags {
   PROXY_GLOBAL = 0xe,
 
   PROXY_SCOPE_MASK = 0xf,
+
+  // forward to a downlink only while we are that interface's querier
+  PROXY_FLAG_STRICT = 0x10,
 };
 
 int proxy_set(int uplink,

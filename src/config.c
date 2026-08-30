@@ -47,7 +47,9 @@ int config_parse_proxy(char* spec, struct proxy_config* out) {
       if (!flags) {
         return -EINVAL;
       }
-      out->flags = flags;
+      out->flags = (out->flags & PROXY_FLAG_STRICT) | flags;
+    } else if (!strcmp(c, "strict")) {
+      out->flags |= PROXY_FLAG_STRICT;
     } else if (!out->uplink) {
       out->uplink = c;
     } else {

@@ -10,19 +10,12 @@ size_t stub_sent_len;
 int stub_sent_family;
 int stub_send_result;
 int stub_send_count;
-int stub_mrib_attach_error;
-size_t stub_mrib_attach_calls;
-size_t stub_mrib_detach_calls;
 
 int mrib_attach_querier(struct mrib_querier* querier,
                         int ifindex,
                         mrib_igmp_cb* cb_igmp,
                         mrib_mld_cb* cb_mld) {
   (void)ifindex;
-  ++stub_mrib_attach_calls;
-  if (stub_mrib_attach_error) {
-    return stub_mrib_attach_error;
-  }
   querier->iface = NULL;
   querier->cb_igmp = cb_igmp;
   querier->cb_mld = cb_mld;
@@ -31,7 +24,6 @@ int mrib_attach_querier(struct mrib_querier* querier,
 
 void mrib_detach_querier(struct mrib_querier* querier) {
   (void)querier;
-  ++stub_mrib_detach_calls;
 }
 
 int mrib_igmp_source(struct mrib_querier* q, struct in_addr* source) {

@@ -75,6 +75,8 @@ static void usage(const char* arg) {
       "	<interface>			interfaces to proxy (first is uplink)\n"
       "	scope=<scope>			minimum multicast scope to proxy\n"
       "		[global,organization,site,admin,realm] (default: global)\n"
+      "	strict				forward to a downlink only while this\n"
+      "		proxy is the elected querier on it (default: always forward)\n"
       "\nOptions:\n"
       "	-v				verbose logging\n"
       "	-h				show this help\n",

@@ -81,6 +81,8 @@ int querier_attach(struct querier_user_iface* user,
                    querier_iface_cb* cb);
 void querier_detach(struct querier_user_iface* user);
 
+void querier_refresh(struct querier_iface* iface);
+
 /* Internal API */
 
 struct querier {

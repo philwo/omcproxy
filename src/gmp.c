@@ -268,6 +268,7 @@ static void gmp_handle_report(struct groups* groups,
   }
 }
 
+// Lower group / source timers for a received specific query (RFC 3376 6.6.1)
 static void gmp_update_query_timers(struct querier_iface* q,
                                     enum gmp_family family,
                                     const struct gmp_query* p) {
@@ -294,18 +295,15 @@ static void gmp_update_query_timers(struct querier_iface* q,
   }
 }
 
-// Handle a normalized query: run the querier election and update timers.
-// Legacy short queries are deliberately excluded from the election.
+// Handle a normalized query: run the querier election, update timers
+// (8-byte v1/v2-only queriers are deliberately excluded from the election,
+// many of them are dumb switches)
 static void gmp_handle_query(struct querier_iface* q,
                              enum gmp_family family,
                              const struct gmp_query* p,
                              int election,
                              const char* fromstr) {
   omgp_time_t now = omgp_time();
-
-  if (!p->suppress && !p->general) {
-    gmp_update_query_timers(q, family, p);
-  }
 
   if (election != 0 && p->full_length) {
     struct groups_config* cfg =
@@ -327,8 +325,13 @@ static void gmp_handle_query(struct querier_iface* q,
       if (!was_other) {
         L_INFO("%s: detected other querier %s on %d", __FUNCTION__, fromstr,
                q->ifindex);
+        querier_refresh(q);
       }
     }
+  }
+
+  if (!p->suppress && !p->general) {
+    gmp_update_query_timers(q, family, p);
   }
 }
 
