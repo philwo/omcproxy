@@ -462,6 +462,7 @@ void groups_update_state(struct groups* groups,
     return;
   }
 
+  bool group_created = created;
   if (created) {
     changed = true;
   }
@@ -515,6 +516,30 @@ void groups_update_state(struct groups* groups,
                      cfg->query_response_interval;
   omgp_time_t llqt = now + (cfg->last_listener_query_interval * llqc);
 
+  if (addr_is_ssm(groupaddr) && !(include && update == UPDATE_BLOCK)) {
+    size_t needed = 0;
+    for (size_t i = 0; i < len; ++i) {
+      bool duplicate = false;
+      for (size_t j = 0; j < i && !duplicate; ++j) {
+        duplicate = IN6_ARE_ADDR_EQUAL(&addrs[i], &addrs[j]);
+      }
+      if (!duplicate && !groups_get_source(groups, group, &addrs[i], NULL)) {
+        ++needed;
+      }
+    }
+
+    if (group->source_count + needed > groups->source_limit) {
+      L_WARN("%s: sources exceed the limit for SSM group %s, ignoring record",
+             __FUNCTION__, addrbuf);
+      if (group_created) {
+        list_del(&group->head);
+        free(group);
+        --groups->group_count;
+      }
+      return;
+    }
+  }
+
   // RFC 3810 7.4
   struct list_head queried = LIST_HEAD_INIT(queried);
   for (size_t i = 0; i < len; ++i) {
@@ -538,9 +563,20 @@ void groups_update_state(struct groups* groups,
       bool query = false;
       if (!source) {
         list_splice(&queried, &group->sources);
-        groups_update_state(groups, groupaddr, NULL, 0, UPDATE_IS_EXCLUDE);
-        L_WARN("%s: failed to allocate source for %s, fallback to ASM",
-               __FUNCTION__, addrbuf);
+        if (addr_is_ssm(groupaddr)) {
+          L_WARN(
+              "%s: failed to allocate source for SSM group %s, "
+              "ignoring remaining sources",
+              __FUNCTION__, addrbuf);
+          if (groups->cb_update) {
+            groups->cb_update(groups, group, now);
+          }
+          rearm_timer(groups, 0);
+        } else {
+          groups_update_state(groups, groupaddr, NULL, 0, UPDATE_IS_EXCLUDE);
+          L_WARN("%s: failed to allocate source for %s, fallback to ASM",
+                 __FUNCTION__, addrbuf);
+        }
         return;
       }
 
