@@ -68,7 +68,7 @@ static ssize_t igmp_handle_record(struct groups* groups,
   return (ssize_t)read;
 }
 
-// Receive and parse an IGMP-packet (called by uloop as callback)
+// Receive and parse an IGMP-packet (called by mrib as callback)
 void igmp_handle(struct mrib_querier* mrib,
                  const struct igmphdr* igmp,
                  size_t len,
@@ -184,7 +184,7 @@ void igmp_handle(struct mrib_querier* mrib,
                                                       : UPDATE_DONE);
   }
 
-  uloop_timeout_set(&q->timeout, 0);
+  ev_timer_set(&q->timeout, 0);
 }
 
 // Send generic / group-specific / group-and-source specific IGMP-query

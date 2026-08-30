@@ -78,7 +78,7 @@ static ssize_t mld_handle_record(struct groups* groups,
   return (ssize_t)read;
 }
 
-// Receive an MLD-Packet from a node (called by uloop as callback)
+// Receive an MLD-Packet from a node (called by mrib as callback)
 void mld_handle(struct mrib_querier* mrib,
                 const struct mld_hdr* hdr,
                 size_t len,
@@ -184,7 +184,7 @@ void mld_handle(struct mrib_querier* mrib,
                             ? UPDATE_REPORT
                             : UPDATE_DONE);
   }
-  uloop_timeout_set(&q->timeout, 0);
+  ev_timer_set(&q->timeout, 0);
 }
 
 // Send generic / group-specific / group-and-source-specific queries

@@ -1,69 +1,56 @@
-#include <stdlib.h>
-
 #include "ev_stub.h"
 
 omgp_time_t stub_now = INT64_C(1) << 20;
 
-#define STUB_MAX_TIMERS 16
-
-static struct uloop_timeout* stub_timers[STUB_MAX_TIMERS];
-static omgp_time_t stub_deadlines[STUB_MAX_TIMERS];
+static LIST_HEAD(stub_timers);
 
 omgp_time_t omgp_time(void) {
   return stub_now;
 }
 
-int uloop_timeout_cancel(struct uloop_timeout* timeout) {
-  for (int i = 0; i < STUB_MAX_TIMERS; ++i) {
-    if (stub_timers[i] == timeout) {
-      stub_timers[i] = NULL;
-    }
+void ev_timer_cancel(struct ev_timer* timer) {
+  if (!timer->pending) {
+    return;
   }
-  timeout->pending = false;
-  return 0;
+  list_del(&timer->head);
+  timer->pending = false;
 }
 
-int uloop_timeout_set(struct uloop_timeout* timeout, int msecs) {
-  uloop_timeout_cancel(timeout);
-  for (int i = 0; i < STUB_MAX_TIMERS; ++i) {
-    if (!stub_timers[i]) {
-      stub_timers[i] = timeout;
-      stub_deadlines[i] = stub_now + msecs;
-      timeout->pending = true;
-      return 0;
+void ev_timer_set(struct ev_timer* timer, omgp_time_t msecs) {
+  ev_timer_cancel(timer);
+  timer->deadline = stub_now + msecs;
+
+  struct list_head* pos = &stub_timers;
+  struct ev_timer* t;
+  list_for_each_entry (t, &stub_timers, head) {
+    if (t->deadline > timer->deadline) {
+      pos = &t->head;
+      break;
     }
   }
-  abort();
+  list_add_tail(&timer->head, pos);
+  timer->pending = true;
 }
 
-int64_t uloop_timeout_remaining64(struct uloop_timeout* timeout) {
-  for (int i = 0; i < STUB_MAX_TIMERS; ++i) {
-    if (stub_timers[i] == timeout) {
-      return stub_deadlines[i] - stub_now;
-    }
+omgp_time_t ev_timer_remaining(const struct ev_timer* timer) {
+  if (!timer->pending) {
+    return -1;
   }
-  return -1;
+  return timer->deadline - stub_now;
 }
 
 void stub_advance(omgp_time_t delta) {
   omgp_time_t end = stub_now + delta;
-  for (;;) {
-    int best = -1;
-    for (int i = 0; i < STUB_MAX_TIMERS; ++i) {
-      if (stub_timers[i] &&
-          (best < 0 || stub_deadlines[i] < stub_deadlines[best])) {
-        best = i;
-      }
-    }
-    if (best < 0 || stub_deadlines[best] > end) {
+  while (!list_empty(&stub_timers)) {
+    struct ev_timer* t = list_first_entry(&stub_timers, struct ev_timer, head);
+    if (t->deadline > end) {
       break;
     }
 
-    struct uloop_timeout* t = stub_timers[best];
-    if (stub_deadlines[best] > stub_now) {
-      stub_now = stub_deadlines[best];
+    if (t->deadline > stub_now) {
+      stub_now = t->deadline;
     }
-    stub_timers[best] = NULL;
+    list_del(&t->head);
     t->pending = false;
     t->cb(t);
   }

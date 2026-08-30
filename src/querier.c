@@ -18,9 +18,6 @@
  */
 
 #include <errno.h>
-#include <libubox/usock.h>
-#include <libubox/ustream.h>
-#include <limits.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
@@ -90,7 +87,7 @@ static void querier_send_query(struct groups* groups,
 }
 
 // Expire interface timers and send queries (called by timer as callback)
-static void querier_iface_timer(struct uloop_timeout* timeout) {
+static void querier_iface_timer(struct ev_timer* timeout) {
   struct querier_iface* iface =
       container_of(timeout, struct querier_iface, timeout);
   omgp_time_t now = omgp_time();
@@ -146,8 +143,7 @@ static void querier_iface_timer(struct uloop_timeout* timeout) {
     next_event = iface->mld_next_query;
   }
 
-  omgp_time_t delay = (next_event > now) ? next_event - now : 0;
-  uloop_timeout_set(&iface->timeout, delay > INT_MAX ? INT_MAX : (int)delay);
+  ev_timer_set(&iface->timeout, (next_event > now) ? next_event - now : 0);
 }
 
 // Calculate QQI from QQIC
@@ -228,7 +224,7 @@ int querier_attach(struct querier_user_iface* user,
 
     iface->ifindex = ifindex;
     iface->timeout.cb = querier_iface_timer;
-    uloop_timeout_set(&iface->timeout, 0);
+    ev_timer_set(&iface->timeout, 0);
 
     groups_init(&iface->groups);
     iface->groups.source_limit = QUERIER_MAX_SOURCE;
@@ -280,7 +276,7 @@ void querier_detach(struct querier_user_iface* user) {
   }
 
   if (list_empty(&iface->users)) {
-    uloop_timeout_cancel(&iface->timeout);
+    ev_timer_cancel(&iface->timeout);
     groups_deinit(&iface->groups);
     mrib_detach_querier(&iface->mrib);
     list_del(&iface->head);

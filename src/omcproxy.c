@@ -21,11 +21,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/signalfd.h>
 #include <unistd.h>
 
-#include <libubox/uloop.h>
-
 #include "config.h"
+#include "ev.h"
 #include "omcproxy.h"
 #include "proxy.h"
 
@@ -54,27 +54,30 @@ static int setup_proxy(char* spec) {
   return proxy_set(uplink, downlinks, cfg.downlink_count, cfg.flags);
 }
 
-static void handle_signal(__unused struct uloop_signal* signal) {
-  uloop_end();
+static struct ev_fd signal_fd;
+
+static void handle_signalfd(struct ev_fd* efd, __unused uint32_t events) {
+  struct signalfd_siginfo info;
+  while (read(efd->fd, &info, sizeof(info)) == sizeof(info)) {
+  }
+  ev_break();
 }
 
-static struct uloop_signal sigint = {.cb = handle_signal, .signo = SIGINT};
-static struct uloop_signal sigterm = {.cb = handle_signal, .signo = SIGTERM};
-
 static void usage(const char* arg) {
-  fprintf(stderr,
-          "Usage: %s [options] <proxy1> [<proxy2>] [...]\n"
-          "\nProxy examples:\n"
-          "eth1,eth2\n"
-          "eth1,eth2,eth3,scope=organization\n"
-          "\nProxy options (each option may only occur once):\n"
-          "\t<interface>\t\t\tinterfaces to proxy (first is uplink)\n"
-          "\tscope=<scope>\t\t\tminimum multicast scope to proxy\n"
-          "\t\t[global,organization,site,admin,realm] (default: global)\n"
-          "\nOptions:\n"
-          "\t-v\t\t\t\tverbose logging\n"
-          "\t-h\t\t\t\tshow this help\n",
-          arg);
+  fprintf(
+      stderr,
+      "Usage: %s [options] <proxy1> [<proxy2>] [...]\n"
+      "\nProxy examples:\n"
+      "eth1,eth2\n"
+      "eth1,eth2,eth3,scope=organization\n"
+      "\nProxy options (each option may only occur once):\n"
+      "	<interface>			interfaces to proxy (first is uplink)\n"
+      "	scope=<scope>			minimum multicast scope to proxy\n"
+      "		[global,organization,site,admin,realm] (default: global)\n"
+      "\nOptions:\n"
+      "	-v				verbose logging\n"
+      "	-h				show this help\n",
+      arg);
 }
 
 int main(int argc, char** argv) {
@@ -88,11 +91,23 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  uloop_init();
-  if (uloop_signal_add(&sigint) || uloop_signal_add(&sigterm)) {
+  if (ev_init()) {
+    L_ERR("failed to initialize event loop: %s", strerror(errno));
+    return 2;
+  }
+
+  sigset_t mask;
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGTERM);
+  sigprocmask(SIG_BLOCK, &mask, NULL);
+
+  int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+  if (sfd < 0 || ev_fd_add(&signal_fd, sfd, EV_READ, handle_signalfd)) {
     L_ERR("failed to set up signal handling: %s", strerror(errno));
     return 2;
   }
+
   bool start = true;
 
   for (int i = 1; i < argc; ++i) {
@@ -124,14 +139,14 @@ int main(int argc, char** argv) {
   }
 
   if (start) {
-    uloop_run();
+    ev_run();
   }
 
   proxy_update(true);
   proxy_flush();
 
-  uloop_signal_delete(&sigterm);
-  uloop_signal_delete(&sigint);
-  uloop_done();
+  ev_fd_del(&signal_fd);
+  close(sfd);
+  ev_deinit();
   return start ? 0 : 1;
 }

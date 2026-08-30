@@ -24,12 +24,12 @@ static in_addr_t addr4(const char* s) {
   return a.s_addr;
 }
 
-static void noop_timer(struct uloop_timeout* t) {
+static void noop_timer(struct ev_timer* t) {
   (void)t;
 }
 
 static void setup(void) {
-  uloop_timeout_cancel(&q.timeout);
+  ev_timer_cancel(&q.timeout);
   memset(&q, 0, sizeof(q));
   INIT_LIST_HEAD(&q.users);
   q.timeout.cb = noop_timer;
@@ -46,7 +46,7 @@ static void setup(void) {
 
 static void teardown(void) {
   groups_deinit(&q.groups);
-  uloop_timeout_cancel(&q.timeout);
+  ev_timer_cancel(&q.timeout);
 }
 
 static struct sockaddr_in from4(void) {

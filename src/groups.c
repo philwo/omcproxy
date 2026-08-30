@@ -19,7 +19,6 @@
 
 #include "groups.h"
 #include <errno.h>
-#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -194,15 +193,14 @@ static omgp_time_t expire_group(struct groups* groups,
 
 // Rearm the global groups-timer if the next event is before timer expiration
 static void rearm_timer(struct groups* groups, omgp_time_t msecs) {
-  int delay = msecs > INT_MAX ? INT_MAX : msecs > 0 ? (int)msecs : 0;
-  int64_t remain = uloop_timeout_remaining64(&groups->timer);
-  if (remain < 0 || remain >= delay) {
-    uloop_timeout_set(&groups->timer, delay);
+  omgp_time_t remain = ev_timer_remaining(&groups->timer);
+  if (remain < 0 || remain >= msecs) {
+    ev_timer_set(&groups->timer, msecs);
   }
 }
 
 // Expire all groups of a group-state (called by timer as callback)
-static void expire_groups(struct uloop_timeout* t) {
+static void expire_groups(struct ev_timer* t) {
   struct groups* groups = container_of(t, struct groups, timer);
   omgp_time_t now = omgp_time();
   omgp_time_t next_event = now + 3600 * OMGP_TIME_PER_SECOND;
@@ -233,7 +231,7 @@ void groups_deinit(struct groups* groups) {
   struct group* safe;
   avl_for_each_element_safe(&groups->groups, group, node, safe)
       querier_remove_group(groups, group, now);
-  uloop_timeout_cancel(&groups->timer);
+  ev_timer_cancel(&groups->timer);
 }
 
 // Get group-object for a given group, create if requested

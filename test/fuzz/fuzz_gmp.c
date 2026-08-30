@@ -11,7 +11,7 @@
 static struct querier_iface q;
 static bool initialized;
 
-static void noop_timer(struct uloop_timeout* t) {
+static void noop_timer(struct ev_timer* t) {
   (void)t;
 }
 

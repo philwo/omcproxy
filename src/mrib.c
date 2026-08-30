@@ -36,7 +36,7 @@
 #include <linux/mroute.h>
 #include <linux/mroute6.h>
 
-#include <libubox/uloop.h>
+#include "ev.h"
 
 #include "mrib.h"
 #include "omcproxy.h"
@@ -53,7 +53,7 @@ struct mrib_iface {
   struct list_head users;
   struct list_head routes;
   struct list_head queriers;
-  struct uloop_timeout timer;
+  struct ev_timer timer;
 };
 
 /* we can't use htobe32 outside a function */
@@ -72,8 +72,8 @@ static struct {
                     .pad = {0, 0}};
 
 static struct mrib_iface mifs[MAXMIFS] = {};
-static struct uloop_fd mrt_fd = {.fd = -1};
-static struct uloop_fd mrt6_fd = {.fd = -1};
+static struct ev_fd mrt_fd = {.fd = -1};
+static struct ev_fd mrt6_fd = {.fd = -1};
 
 // Unmap IPv4 address from IPv6
 static inline void mrib_unmap(struct in_addr* addr4,
@@ -154,9 +154,9 @@ static int mrib_set(const struct in6_addr* group,
 // We have no way of knowing when a source disappears, so we delete multicast
 // routes from time to time
 static void mrib_clean_routes(struct mrib_iface* iface) {
-  struct uloop_timeout* timer = &iface->timer;
+  struct ev_timer* timer = &iface->timer;
   omgp_time_t now = omgp_time();
-  uloop_timeout_cancel(timer);
+  ev_timer_cancel(timer);
 
   struct mrib_route* c;
   struct mrib_route* n;
@@ -167,14 +167,13 @@ static void mrib_clean_routes(struct mrib_iface* iface) {
       list_del(&c->head);
       free(c);
     } else {
-      omgp_time_t delay = c->valid_until - now;
-      uloop_timeout_set(timer, delay > INT_MAX ? INT_MAX : (int)delay);
+      ev_timer_set(timer, c->valid_until - now);
       break;
     }
   }
 }
 
-static void mrib_clean(struct uloop_timeout* timer) {
+static void mrib_clean(struct ev_timer* timer) {
   for (size_t i = 0; i < MAXMIFS; ++i) {
     if (timer == &mifs[i].timer) {
       mrib_clean_routes(&mifs[i]);
@@ -219,8 +218,7 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
         omgp_time() + MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND;
 
     if (list_empty(&iface->routes)) {
-      uloop_timeout_set(&iface->timer,
-                        MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND);
+      ev_timer_set(&iface->timer, MRIB_DEFAULT_LIFETIME * OMGP_TIME_PER_SECOND);
     }
 
     list_add_tail(&route->head, &iface->routes);
@@ -247,7 +245,7 @@ static uint16_t igmp_checksum(const uint16_t* buf, size_t len) {
 }
 
 // Receive and handle MRT event
-static void mrib_receive_mrt(struct uloop_fd* fd, __unused unsigned flags) {
+static void mrib_receive_mrt(struct ev_fd* fd, __unused uint32_t events) {
   uint8_t buf[9216];
   uint8_t cbuf[CMSG_SPACE(sizeof(struct in_pktinfo))];
   char addrbuf[INET_ADDRSTRLEN];
@@ -263,7 +261,13 @@ static void mrib_receive_mrt(struct uloop_fd* fd, __unused unsigned flags) {
                          .msg_controllen = sizeof(cbuf)};
 
     ssize_t len = recvmsg(fd->fd, &hdr, MSG_DONTWAIT);
-    if (len < 0 && errno == EAGAIN) {
+    if (len < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      if (errno != EAGAIN) {
+        L_WARN("%s: recvmsg: %s", __FUNCTION__, strerror(errno));
+      }
       break;
     }
 
@@ -355,7 +359,7 @@ static void mrib_receive_mrt(struct uloop_fd* fd, __unused unsigned flags) {
 }
 
 // Receive and handle MRT6 event
-static void mrib_receive_mrt6(struct uloop_fd* fd, __unused unsigned flags) {
+static void mrib_receive_mrt6(struct ev_fd* fd, __unused uint32_t events) {
   uint8_t buf[9216];
   uint8_t cbuf[128];
   char addrbuf[INET6_ADDRSTRLEN];
@@ -371,7 +375,13 @@ static void mrib_receive_mrt6(struct uloop_fd* fd, __unused unsigned flags) {
                          .msg_controllen = sizeof(cbuf)};
 
     ssize_t len = recvmsg(fd->fd, &hdr, MSG_DONTWAIT);
-    if (len < 0 && errno == EAGAIN) {
+    if (len < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      if (errno != EAGAIN) {
+        L_WARN("%s: recvmsg: %s", __FUNCTION__, strerror(errno));
+      }
       break;
     }
 
@@ -601,11 +611,8 @@ static int mrib_init(void) {
 
   mrt6_fd.fd = fd;
 
-  mrt_fd.cb = mrib_receive_mrt;
-  mrt6_fd.cb = mrib_receive_mrt6;
-
-  uloop_fd_add(&mrt_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
-  uloop_fd_add(&mrt6_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
+  ev_fd_add(&mrt_fd, mrt_fd.fd, EV_READ | EV_EDGE, mrib_receive_mrt);
+  ev_fd_add(&mrt6_fd, mrt6_fd.fd, EV_READ | EV_EDGE, mrib_receive_mrt6);
 
   fd = -1;
   errno = 0;

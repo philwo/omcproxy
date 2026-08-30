@@ -21,7 +21,7 @@
 
 #include <arpa/inet.h>
 #include <libubox/avl.h>
-#include <libubox/uloop.h>
+#include "ev.h"
 #include "list.h"
 #include "omcproxy.h"
 
@@ -67,7 +67,7 @@ struct groups {
   struct groups_config cfg_v4;
   struct groups_config cfg_v6;
   struct avl_tree groups;
-  struct uloop_timeout timer;
+  struct ev_timer timer;
   size_t source_limit;
   size_t group_limit;
   groups_query_cb* cb_query;

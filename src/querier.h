@@ -19,11 +19,12 @@
 
 #pragma once
 #include <libubox/avl.h>
-#include <libubox/uloop.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <stdbool.h>
+
 #include <string.h>
+#include "ev.h"
 #include "list.h"
 
 #include "groups.h"
@@ -32,15 +33,13 @@
 struct querier_iface {
   struct list_head head;
   struct list_head users;
-  struct uloop_timeout timeout;
+  struct ev_timer timeout;
   struct groups_config cfg;
 
-  struct uloop_fd igmp_fd;
   omgp_time_t igmp_next_query;
   bool igmp_other_querier;
   int igmp_startup_tries;
 
-  struct uloop_fd mld_fd;
   omgp_time_t mld_next_query;
   bool mld_other_querier;
   int mld_startup_tries;
