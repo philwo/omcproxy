@@ -19,12 +19,12 @@
 
 #pragma once
 #include <libubox/avl.h>
-#include <libubox/list.h>
 #include <libubox/uloop.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <string.h>
+#include "list.h"
 
 #include "groups.h"
 #include "mrib.h"
@@ -100,7 +100,7 @@ static inline in_addr_t querier_unmap(const struct in6_addr* addr6) {
 static inline void querier_map(struct in6_addr* addr6, in_addr_t addr4) {
   addr6->s6_addr32[0] = 0;
   addr6->s6_addr32[1] = 0;
-  addr6->s6_addr32[2] = cpu_to_be32(0xffff);
+  addr6->s6_addr32[2] = htobe32(0xffff);
   addr6->s6_addr32[3] = addr4;
 }
 

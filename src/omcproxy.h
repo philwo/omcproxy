@@ -33,7 +33,7 @@
 
 #endif /* __APPLE__ */
 
-#include <libubox/utils.h>
+#include <endian.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>

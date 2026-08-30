@@ -56,7 +56,7 @@ struct mrib_iface {
   struct uloop_timeout timer;
 };
 
-/* we can't use cpu_to_be32 outside a function */
+/* we can't use htobe32 outside a function */
 #if __BYTE_ORDER == __BIG_ENDIAN
 static uint32_t ipv4_rtr_alert = 0x94040000;
 #else
@@ -293,9 +293,9 @@ static void mrib_receive_mrt(struct uloop_fd* fd, __unused unsigned flags) {
 
       struct in6_addr dst = IN6ADDR_ANY_INIT;
       struct in6_addr src = IN6ADDR_ANY_INIT;
-      dst.s6_addr32[2] = cpu_to_be32(0xffff);
+      dst.s6_addr32[2] = htobe32(0xffff);
       dst.s6_addr32[3] = msg->im_dst.s_addr;
-      src.s6_addr32[2] = cpu_to_be32(0xffff);
+      src.s6_addr32[2] = htobe32(0xffff);
       src.s6_addr32[3] = msg->im_src.s_addr;
 
       mrib_notify_newsource(iface, &dst, &src);
@@ -651,7 +651,7 @@ static struct mrib_iface* mrib_get_iface(int ifindex) {
   struct ip_mreqn mreq = {{INADDR_ALLIGMPV3RTRS_GROUP}, {INADDR_ANY}, ifindex};
   setsockopt(mrt_fd.fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
 
-  mreq.imr_multiaddr.s_addr = cpu_to_be32(INADDR_ALLRTRS_GROUP);
+  mreq.imr_multiaddr.s_addr = htobe32(INADDR_ALLRTRS_GROUP);
   setsockopt(mrt_fd.fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
 
   struct ipv6_mreq mreq6 = {MLD2_ALL_MCR_INIT, ifindex};
@@ -692,7 +692,7 @@ static void mrib_clean_iface(struct mrib_iface* iface) {
         {INADDR_ALLIGMPV3RTRS_GROUP}, {INADDR_ANY}, iface->ifindex};
     setsockopt(mrt_fd.fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
 
-    mreq.imr_multiaddr.s_addr = cpu_to_be32(INADDR_ALLRTRS_GROUP);
+    mreq.imr_multiaddr.s_addr = htobe32(INADDR_ALLRTRS_GROUP);
     setsockopt(mrt_fd.fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
 
     struct ipv6_mreq mreq6 = {MLD2_ALL_MCR_INIT, iface->ifindex};
@@ -805,8 +805,7 @@ int mrib_mld_source(struct mrib_querier* q, struct in6_addr* source) {
 
 // Get IGMP source address
 int mrib_igmp_source(struct mrib_querier* q, struct in_addr* source) {
-  struct sockaddr_in addr = {
-      AF_INET, 0, {cpu_to_be32(INADDR_ALLHOSTS_GROUP)}, {0}};
+  struct sockaddr_in addr = {AF_INET, 0, {htobe32(INADDR_ALLHOSTS_GROUP)}, {0}};
   socklen_t alen = sizeof(addr);
   struct ifreq ifr = {.ifr_name = ""};
   int sock = socket(AF_INET, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_IGMP);

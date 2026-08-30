@@ -30,7 +30,7 @@
 
 // Test if multicast-group is valid and relevant
 static inline bool igmp_is_valid_group(in_addr_t group) {
-  return IN_MULTICAST(be32_to_cpu(group));
+  return IN_MULTICAST(be32toh(group));
 }
 
 // Handle an IGMP-record from an IGMP-packet (called by igmp_receive)

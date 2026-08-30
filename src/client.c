@@ -24,9 +24,9 @@
 
 #include <arpa/inet.h>
 #include <libubox/avl.h>
-#include <libubox/list.h>
 #include <linux/mroute6.h>
 #include <netinet/in.h>
+#include "list.h"
 
 #include "client.h"
 

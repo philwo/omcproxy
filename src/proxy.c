@@ -16,8 +16,9 @@
  */
 
 #include <errno.h>
-#include <libubox/list.h>
 #include <string.h>
+
+#include "list.h"
 
 #include "client.h"
 #include "mrib.h"

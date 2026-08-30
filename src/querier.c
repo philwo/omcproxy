@@ -18,13 +18,13 @@
  */
 
 #include <errno.h>
-#include <libubox/list.h>
 #include <libubox/usock.h>
 #include <libubox/ustream.h>
 #include <limits.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
+#include "list.h"
 
 #include "querier.h"
 

@@ -19,9 +19,9 @@
 
 #pragma once
 
-#include <libubox/list.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include "list.h"
 
 #include <netinet/icmp6.h>
 
@@ -36,7 +36,7 @@
   {                                                 \
     { { 0xff,0x02,0,0,0,0,0,0,0,0,0,0,0,0,0,0x1 } } \
   }
-#define INADDR_ALLIGMPV3RTRS_GROUP cpu_to_be32(0xe0000016U)
+#define INADDR_ALLIGMPV3RTRS_GROUP htobe32(0xe0000016U)
 
 typedef uint32_t mrib_filter;
 struct mrib_iface;

@@ -21,8 +21,8 @@
 
 #include <arpa/inet.h>
 #include <libubox/avl.h>
-#include <libubox/list.h>
 #include <libubox/uloop.h>
+#include "list.h"
 #include "omcproxy.h"
 
 struct group {
