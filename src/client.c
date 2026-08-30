@@ -23,7 +23,6 @@
 #include <unistd.h>
 
 #include <arpa/inet.h>
-#include <libubox/avl.h>
 #include <linux/mroute6.h>
 #include <netinet/in.h>
 #include "list.h"

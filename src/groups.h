@@ -20,13 +20,12 @@
 #pragma once
 
 #include <arpa/inet.h>
-#include <libubox/avl.h>
 #include "ev.h"
 #include "list.h"
 #include "omcproxy.h"
 
 struct group {
-  struct avl_node node;
+  struct list_head head;
   struct in6_addr addr;
   struct list_head sources;
   size_t source_count;
@@ -66,7 +65,7 @@ struct groups_config {
 struct groups {
   struct groups_config cfg_v4;
   struct groups_config cfg_v6;
-  struct avl_tree groups;
+  struct list_head groups;
   struct ev_timer timer;
   size_t source_limit;
   size_t group_limit;
@@ -122,7 +121,7 @@ static inline bool source_is_included(const struct group_source* source,
 }
 
 #define groups_for_each_group(group, groupsp) \
-  avl_for_each_element(&(groupsp)->groups, group, node)
+  list_for_each_entry (group, &(groupsp)->groups, head)
 
 #define group_for_each_source(source, group) \
   list_for_each_entry (source, &(group)->sources, head)

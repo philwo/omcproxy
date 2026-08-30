@@ -18,7 +18,6 @@
  */
 
 #pragma once
-#include <libubox/avl.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <stdbool.h>

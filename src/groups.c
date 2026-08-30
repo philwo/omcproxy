@@ -22,11 +22,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Group comparator for AVL-tree
-static int compare_groups(const void* k1, const void* k2, __unused void* ptr) {
-  return memcmp(k1, k2, sizeof(struct in6_addr));
-}
-
 // Remove a source-definition for a group
 static void querier_remove_source(struct group* group,
                                   struct group_source* source) {
@@ -74,7 +69,7 @@ static void querier_remove_group(struct groups* groups,
     groups->cb_update(groups, group, now);
   }
 
-  avl_delete(&groups->groups, &group->node);
+  list_del(&group->head);
   free(group);
 }
 
@@ -207,15 +202,16 @@ static void expire_groups(struct ev_timer* t) {
 
   struct group* group;
   struct group* n;
-  avl_for_each_element_safe(&groups->groups, group, node, n) next_event =
-      expire_group(groups, group, now, next_event);
+  list_for_each_entry_safe (group, n, &groups->groups, head) {
+    next_event = expire_group(groups, group, now, next_event);
+  }
 
   rearm_timer(groups, (next_event > now) ? next_event - now : 0);
 }
 
 // Initialize a group-state
 void groups_init(struct groups* groups) {
-  avl_init(&groups->groups, compare_groups, false, NULL);
+  INIT_LIST_HEAD(&groups->groups);
   groups->timer.cb = expire_groups;
 
   groups_update_config(groups, false, OMGP_TIME_PER_SECOND * 10,
@@ -229,8 +225,9 @@ void groups_deinit(struct groups* groups) {
   omgp_time_t now = omgp_time();
   struct group* group;
   struct group* safe;
-  avl_for_each_element_safe(&groups->groups, group, node, safe)
-      querier_remove_group(groups, group, now);
+  list_for_each_entry_safe (group, safe, &groups->groups, head) {
+    querier_remove_group(groups, group, now);
+  }
   ev_timer_cancel(&groups->timer);
 }
 
@@ -238,13 +235,20 @@ void groups_deinit(struct groups* groups) {
 static struct group* groups_get_group(struct groups* groups,
                                       const struct in6_addr* addr,
                                       bool* created) {
-  struct group* group = avl_find_element(&groups->groups, addr, group, node);
+  struct group* c;
+  struct group* group = NULL;
+  groups_for_each_group (c, groups) {
+    if (IN6_ARE_ADDR_EQUAL(&c->addr, addr)) {
+      group = c;
+      break;
+    }
+  }
+
   if (!group && created) {
     group = calloc(1, sizeof(*group));
     if (group) {
       group->addr = *addr;
-      group->node.key = &group->addr;
-      avl_insert(&groups->groups, &group->node);
+      list_add_tail(&group->head, &groups->groups);
 
       INIT_LIST_HEAD(&group->sources);
     }
@@ -569,8 +573,8 @@ bool groups_includes_group(struct groups* groups,
                            omgp_time_t time) {
   struct group* group = groups_get_group(groups, addr, NULL);
   if (group) {
-    if (!src && (!group_is_included(group, time) || group->source_count > 0)) {
-      return true;
+    if (!src) {
+      return !group_is_included(group, time) || group->source_count > 0;
     }
 
     struct group_source* source = groups_get_source(groups, group, src, NULL);
