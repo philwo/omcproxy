@@ -36,6 +36,7 @@ find_library(libubox ubox REQUIRED)
 
 add_library(omcproxy_core OBJECT
   src/client.c
+  src/config.c
   src/ev.c
   src/groups.c
   src/igmp.c

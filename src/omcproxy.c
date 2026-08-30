@@ -17,98 +17,41 @@
 
 #include <errno.h>
 #include <net/if.h>
-#include <netdb.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include <libubox/blobmsg.h>
 #include <libubox/uloop.h>
 
+#include "config.h"
 #include "omcproxy.h"
 #include "proxy.h"
 
-enum {
-  PROXY_ATTR_SOURCE,
-  PROXY_ATTR_SCOPE,
-  PROXY_ATTR_DEST,
-  PROXY_ATTR_MAX,
-};
-
-static struct blobmsg_policy proxy_policy[PROXY_ATTR_MAX] = {
-    [PROXY_ATTR_SOURCE] = {.name = "source", .type = BLOBMSG_TYPE_STRING},
-    [PROXY_ATTR_SCOPE] = {.name = "scope", .type = BLOBMSG_TYPE_STRING},
-    [PROXY_ATTR_DEST] = {.name = "dest", .type = BLOBMSG_TYPE_ARRAY},
-};
-
-static int handle_proxy_set(void* data, size_t len) {
-  struct blob_attr* tb[PROXY_ATTR_MAX];
-  struct blob_attr* c;
-  blobmsg_parse(proxy_policy, PROXY_ATTR_MAX, tb, data, len);
-
-  c = tb[PROXY_ATTR_SOURCE];
-  const char* name = c ? blobmsg_get_string(c) : NULL;
-  int downlinks[32] = {0};
-  size_t downlinks_cnt = 0;
-  enum proxy_flags flags = 0;
-
-  if (!name) {
+static int setup_proxy(char* spec) {
+  struct proxy_config cfg;
+  if (config_parse_proxy(spec, &cfg)) {
     return -EINVAL;
   }
 
-  int uplink = (int)if_nametoindex(name);
+  int uplink = (int)if_nametoindex(cfg.uplink);
   if (!uplink) {
-    L_WARN("%s(%s): %s", __FUNCTION__, name, strerror(errno));
+    L_WARN("%s(%s): %s", __FUNCTION__, cfg.uplink, strerror(errno));
     return -errno;
   }
 
-  c = tb[PROXY_ATTR_SCOPE];
-  if (c) {
-    const char* scope = blobmsg_get_string(c);
-    if (!strcmp(scope, "global")) {
-      flags = PROXY_GLOBAL;
-    } else if (!strcmp(scope, "organization")) {
-      flags = PROXY_ORGLOCAL;
-    } else if (!strcmp(scope, "site")) {
-      flags = PROXY_SITELOCAL;
-    } else if (!strcmp(scope, "admin")) {
-      flags = PROXY_ADMINLOCAL;
-    } else if (!strcmp(scope, "realm")) {
-      flags = PROXY_REALMLOCAL;
-    }
-
-    if (!flags) {
-      L_WARN("%s(%s): invalid scope (%s)", __FUNCTION__, name, scope);
-      return -EINVAL;
+  int downlinks[CONFIG_MAX_DOWNLINKS];
+  for (size_t i = 0; i < cfg.downlink_count; ++i) {
+    downlinks[i] = (int)if_nametoindex(cfg.downlinks[i]);
+    if (!downlinks[i]) {
+      L_WARN("%s(%s): %s (%s)", __FUNCTION__, cfg.uplink, strerror(errno),
+             cfg.downlinks[i]);
+      return -errno;
     }
   }
 
-  c = tb[PROXY_ATTR_DEST];
-  if (c) {
-    struct blob_attr* d;
-    unsigned rem;
-    blobmsg_for_each_attr(d, c, rem) {
-      if (downlinks_cnt >= 32) {
-        L_WARN("%s(%s): maximum number of destinations exceeded", __FUNCTION__,
-               name);
-        return -EINVAL;
-      }
-
-      const char* n =
-          blobmsg_type(d) == BLOBMSG_TYPE_STRING ? blobmsg_get_string(d) : "";
-      int downlink = (int)if_nametoindex(n);
-      if (!downlink) {
-        L_WARN("%s(%s): %s (%s)", __FUNCTION__, name, strerror(errno),
-               blobmsg_get_string(d));
-        return -errno;
-      }
-      downlinks[downlinks_cnt++] = downlink;
-    }
-  }
-
-  return proxy_set(uplink, downlinks, downlinks_cnt, flags);
+  return proxy_set(uplink, downlinks, cfg.downlink_count, cfg.flags);
 }
 
 static void handle_signal(__unused struct uloop_signal* signal) {
@@ -119,20 +62,19 @@ static struct uloop_signal sigint = {.cb = handle_signal, .signo = SIGINT};
 static struct uloop_signal sigterm = {.cb = handle_signal, .signo = SIGTERM};
 
 static void usage(const char* arg) {
-  fprintf(
-      stderr,
-      "Usage: %s [options] <proxy1> [<proxy2>] [...]\n"
-      "\nProxy examples:\n"
-      "eth1,eth2\n"
-      "eth1,eth2,eth3,scope=organization\n"
-      "\nProxy options (each option may only occur once):\n"
-      "	<interface>			interfaces to proxy (first is uplink)\n"
-      "	scope=<scope>			minimum multicast scope to proxy\n"
-      "		[global,organization,site,admin,realm] (default: global)\n"
-      "\nOptions:\n"
-      "	-v				verbose logging\n"
-      "	-h				show this help\n",
-      arg);
+  fprintf(stderr,
+          "Usage: %s [options] <proxy1> [<proxy2>] [...]\n"
+          "\nProxy examples:\n"
+          "eth1,eth2\n"
+          "eth1,eth2,eth3,scope=organization\n"
+          "\nProxy options (each option may only occur once):\n"
+          "\t<interface>\t\t\tinterfaces to proxy (first is uplink)\n"
+          "\tscope=<scope>\t\t\tminimum multicast scope to proxy\n"
+          "\t\t[global,organization,site,admin,realm] (default: global)\n"
+          "\nOptions:\n"
+          "\t-v\t\t\t\tverbose logging\n"
+          "\t-h\t\t\t\tshow this help\n",
+          arg);
 }
 
 int main(int argc, char** argv) {
@@ -153,14 +95,10 @@ int main(int argc, char** argv) {
   }
   bool start = true;
 
-  for (ssize_t i = 1; i < argc; ++i) {
-    const char* source = NULL;
-    const char* scope = NULL;
-    struct blob_buf b = {NULL, NULL, 0, NULL};
-
+  for (int i = 1; i < argc; ++i) {
     if (!strcmp(argv[i], "-h")) {
       usage(argv[0]);
-      return 1;
+      return 0;
     } else if (!strncmp(argv[i], "-v", 2)) {
       const char* value = &argv[i][2];
       char* end = NULL;
@@ -174,34 +112,10 @@ int main(int argc, char** argv) {
       continue;
     }
 
-    blob_buf_init(&b, 0);
-
-    void* k = blobmsg_open_array(&b, "dest");
-    for (char* c = strtok(argv[i], ","); c; c = strtok(NULL, ",")) {
-      if (!strncmp(c, "scope=", 6)) {
-        scope = &c[6];
-      } else if (!source) {
-        source = c;
-      } else {
-        blobmsg_add_string(&b, NULL, c);
-      }
-    }
-    blobmsg_close_array(&b, k);
-
-    if (source) {
-      blobmsg_add_string(&b, "source", source);
-    }
-
-    if (scope) {
-      blobmsg_add_string(&b, "scope", scope);
-    }
-
-    if (handle_proxy_set(blob_data(b.head), blob_len(b.head))) {
+    if (setup_proxy(argv[i])) {
       fprintf(stderr, "failed to setup proxy: %s\n", argv[i]);
       start = false;
     }
-
-    blob_buf_free(&b);
   }
 
   if (argc < 2) {

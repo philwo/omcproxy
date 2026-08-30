@@ -1,6 +1,14 @@
 add_test(NAME config_error COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/unit/config_error_test.sh $<TARGET_FILE:omcproxy>)
 set_tests_properties(config_error PROPERTIES SKIP_RETURN_CODE 77)
 
+add_executable(test_config
+  unit/test_config.c
+  ${CMAKE_SOURCE_DIR}/src/config.c
+)
+target_include_directories(test_config PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+target_link_libraries(test_config PRIVATE omcproxy_build omcproxy_warnings)
+add_test(NAME config COMMAND test_config)
+
 add_executable(test_groups
   unit/test_groups.c
   unit/ev_stub.c
