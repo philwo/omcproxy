@@ -71,6 +71,10 @@ static struct {
                     .rt = {IP6OPT_ROUTER_ALERT, 2, {0, IP6_ALERT_MLD}},
                     .pad = {0, 0}};
 
+static_assert(MAXMIFS == MAXVIFS, "one MIF table serves both families");
+static_assert(MAXMIFS <= 8 * sizeof(mrib_filter),
+              "MIF ids must fit the filter bitmap");
+
 static struct mrib_iface mifs[MAXMIFS] = {};
 static struct ev_fd mrt_fd = {.fd = -1};
 static struct ev_fd mrt6_fd = {.fd = -1};
@@ -88,15 +92,15 @@ static int mrib_set(const struct in6_addr* group,
                     mrib_filter dest,
                     bool del) {
   int status = 0;
-  size_t mifid = iface - mifs;
+  size_t mifid = (size_t)(iface - mifs);
   if (IN6_IS_ADDR_V4MAPPED(group)) {
-    struct mfcctl ctl = {.mfcc_parent = mifid};
+    struct mfcctl ctl = {.mfcc_parent = (vifi_t)mifid};
     mrib_unmap(&ctl.mfcc_origin, source);
     mrib_unmap(&ctl.mfcc_mcastgrp, group);
 
     if (!del) {
       for (size_t i = 0; i < MAXMIFS; ++i) {
-        if (dest & (1 << i)) {
+        if (dest & mrib_filter_bit(i)) {
           ctl.mfcc_ttls[i] = 1;
         }
       }
@@ -108,14 +112,14 @@ static int mrib_set(const struct in6_addr* group,
     }
   } else {
     struct mf6cctl ctl = {
-        .mf6cc_origin = {AF_INET6, 0, 0, *source, 0},
-        .mf6cc_mcastgrp = {AF_INET6, 0, 0, *group, 0},
-        .mf6cc_parent = mifid,
+        .mf6cc_origin = {.sin6_family = AF_INET6, .sin6_addr = *source},
+        .mf6cc_mcastgrp = {.sin6_family = AF_INET6, .sin6_addr = *group},
+        .mf6cc_parent = (mifi_t)mifid,
     };
 
     if (!del) {
       for (size_t i = 0; i < MAXMIFS; ++i) {
-        if (dest & (1 << i)) {
+        if (dest & mrib_filter_bit(i)) {
           IF_SET(i, &ctl.mf6cc_ifset);
         }
       }
@@ -135,13 +139,18 @@ static int mrib_set(const struct in6_addr* group,
     L_DEBUG("%s: deleting MFC-entry for %s from %s%%%d: %s", __FUNCTION__,
             groupbuf, sourcebuf, iface->ifindex, strerror(-status));
   } else {
-    int ifbuf_len = 0;
+    size_t ifbuf_len = 0;
     char ifbuf[256] = {0};
     for (size_t i = 0; i < MAXMIFS; ++i) {
-      if (dest & (1 << i)) {
-        ifbuf_len += snprintf(&ifbuf[ifbuf_len], sizeof(ifbuf) - ifbuf_len,
-                              " %d", mifs[i].ifindex);
+      if (!(dest & mrib_filter_bit(i))) {
+        continue;
       }
+      int written = snprintf(&ifbuf[ifbuf_len], sizeof(ifbuf) - ifbuf_len,
+                             " %d", mifs[i].ifindex);
+      if (written < 0 || (size_t)written >= sizeof(ifbuf) - ifbuf_len) {
+        break;
+      }
+      ifbuf_len += (size_t)written;
     }
 
     L_DEBUG("%s: setting MFC-entry for %s from %s%%%d to%s: %s", __FUNCTION__,
@@ -241,7 +250,7 @@ static uint16_t igmp_checksum(const uint16_t* buf, size_t len) {
     sum += (sum + (sum >> 16)) & 0xffff;
   }
 
-  return ~sum;
+  return (uint16_t)~sum;
 }
 
 // Receive and handle MRT event
@@ -330,7 +339,7 @@ static void mrib_receive_mrt(struct ev_fd* fd, __unused uint32_t events) {
       igmp->csum = 0;
 
       if (iph->ttl != 1 || len < (ssize_t)sizeof(*igmp) ||
-          checksum != igmp_checksum((uint16_t*)igmp, len)) {
+          checksum != igmp_checksum((uint16_t*)igmp, (size_t)len)) {
         L_WARN("%s: ignoring invalid IGMP-message of type %x from %s on %d",
                __FUNCTION__, igmp->type, addrbuf, ifindex);
         continue;
@@ -350,7 +359,7 @@ static void mrib_receive_mrt(struct ev_fd* fd, __unused uint32_t events) {
         struct mrib_querier* q;
         list_for_each_entry (q, &mifs[mifid].queriers, head) {
           if (q->cb_igmp) {
-            q->cb_igmp(q, igmp, len, &from);
+            q->cb_igmp(q, igmp, (size_t)len, &from);
           }
         }
       }
@@ -443,7 +452,7 @@ static void mrib_receive_mrt6(struct ev_fd* fd, __unused uint32_t events) {
         struct mrib_querier* q;
         list_for_each_entry (q, &mifs[mifid].queriers, head) {
           if (q->cb_mld) {
-            q->cb_mld(q, mld, len, &from);
+            q->cb_mld(q, mld, (size_t)len, &from);
           }
         }
       }
@@ -506,7 +515,7 @@ int mrib_send_mld(struct mrib_querier* q,
   chdr->cmsg_len = CMSG_LEN(sizeof(struct in6_pktinfo));
 
   struct in6_pktinfo* pktinfo = (struct in6_pktinfo*)CMSG_DATA(chdr);
-  pktinfo->ipi6_ifindex = q->iface->ifindex;
+  pktinfo->ipi6_ifindex = (unsigned int)q->iface->ifindex;
   if (mrib_mld_source(q, &pktinfo->ipi6_addr)) {
     return -errno;
   }
@@ -644,24 +653,37 @@ static struct mrib_iface* mrib_get_iface(int ifindex) {
   struct mrib_iface* iface = &mifs[mifid];
 
   struct vifctl ctl = {
-      mifid,       VIFF_USE_IFINDEX, 1, 0, {.vifc_lcl_ifindex = ifindex},
-      {INADDR_ANY}};
+      .vifc_vifi = (vifi_t)mifid,
+      .vifc_flags = VIFF_USE_IFINDEX,
+      .vifc_threshold = 1,
+      .vifc_lcl_ifindex = ifindex,
+  };
   if (setsockopt(mrt_fd.fd, IPPROTO_IP, MRT_ADD_VIF, &ctl, sizeof(ctl))) {
     return NULL;
   }
 
-  struct mif6ctl ctl6 = {mifid, 0, 1, ifindex, 0};
+  struct mif6ctl ctl6 = {
+      .mif6c_mifi = (mifi_t)mifid,
+      .vifc_threshold = 1,
+      .mif6c_pifi = (uint16_t)ifindex,
+  };
   if (setsockopt(mrt6_fd.fd, IPPROTO_IPV6, MRT6_ADD_MIF, &ctl6, sizeof(ctl6))) {
     return NULL;
   }
 
-  struct ip_mreqn mreq = {{INADDR_ALLIGMPV3RTRS_GROUP}, {INADDR_ANY}, ifindex};
+  struct ip_mreqn mreq = {
+      .imr_multiaddr = {INADDR_ALLIGMPV3RTRS_GROUP},
+      .imr_ifindex = ifindex,
+  };
   setsockopt(mrt_fd.fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
 
   mreq.imr_multiaddr.s_addr = htobe32(INADDR_ALLRTRS_GROUP);
   setsockopt(mrt_fd.fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
 
-  struct ipv6_mreq mreq6 = {MLD2_ALL_MCR_INIT, ifindex};
+  struct ipv6_mreq mreq6 = {
+      .ipv6mr_multiaddr = MLD2_ALL_MCR_INIT,
+      .ipv6mr_interface = (unsigned int)ifindex,
+  };
   setsockopt(mrt6_fd.fd, IPPROTO_IPV6, IPV6_ADD_MEMBERSHIP, &mreq6,
              sizeof(mreq6));
 
@@ -683,26 +705,35 @@ static void mrib_clean_iface(struct mrib_iface* iface) {
     iface->ifindex = 0;
     mrib_clean_routes(iface);
 
-    size_t mifid = iface - mifs;
-    struct vifctl ctl = {mifid,
-                         VIFF_USE_IFINDEX,
-                         1,
-                         0,
-                         {.vifc_lcl_ifindex = iface->ifindex},
-                         {INADDR_ANY}};
+    size_t mifid = (size_t)(iface - mifs);
+    struct vifctl ctl = {
+        .vifc_vifi = (vifi_t)mifid,
+        .vifc_flags = VIFF_USE_IFINDEX,
+        .vifc_threshold = 1,
+        .vifc_lcl_ifindex = iface->ifindex,
+    };
     setsockopt(mrt_fd.fd, IPPROTO_IP, MRT_DEL_VIF, &ctl, sizeof(ctl));
 
-    struct mif6ctl ctl6 = {mifid, 0, 1, iface->ifindex, 0};
+    struct mif6ctl ctl6 = {
+        .mif6c_mifi = (mifi_t)mifid,
+        .vifc_threshold = 1,
+        .mif6c_pifi = (uint16_t)iface->ifindex,
+    };
     setsockopt(mrt6_fd.fd, IPPROTO_IPV6, MRT6_DEL_MIF, &ctl6, sizeof(ctl6));
 
     struct ip_mreqn mreq = {
-        {INADDR_ALLIGMPV3RTRS_GROUP}, {INADDR_ANY}, iface->ifindex};
+        .imr_multiaddr = {INADDR_ALLIGMPV3RTRS_GROUP},
+        .imr_ifindex = iface->ifindex,
+    };
     setsockopt(mrt_fd.fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
 
     mreq.imr_multiaddr.s_addr = htobe32(INADDR_ALLRTRS_GROUP);
     setsockopt(mrt_fd.fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
 
-    struct ipv6_mreq mreq6 = {MLD2_ALL_MCR_INIT, iface->ifindex};
+    struct ipv6_mreq mreq6 = {
+        .ipv6mr_multiaddr = MLD2_ALL_MCR_INIT,
+        .ipv6mr_interface = (unsigned int)iface->ifindex,
+    };
     setsockopt(mrt6_fd.fd, IPPROTO_IPV6, IPV6_DROP_MEMBERSHIP, &mreq6,
                sizeof(mreq6));
 
@@ -779,14 +810,17 @@ int mrib_filter_add(mrib_filter* filter, struct mrib_user* user) {
     return -ENOENT;
   }
 
-  *filter |= 1 << (iface - mifs);
+  *filter |= mrib_filter_bit((size_t)(iface - mifs));
   return 0;
 }
 
 // Get MLD source address
 int mrib_mld_source(struct mrib_querier* q, struct in6_addr* source) {
-  struct sockaddr_in6 addr = {AF_INET6, 0, 0, MLD2_ALL_MCR_INIT,
-                              q->iface->ifindex};
+  struct sockaddr_in6 addr = {
+      .sin6_family = AF_INET6,
+      .sin6_addr = MLD2_ALL_MCR_INIT,
+      .sin6_scope_id = (uint32_t)q->iface->ifindex,
+  };
   socklen_t alen = sizeof(addr);
   int sock = socket(AF_INET6, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_ICMPV6);
   int ret = 0;
@@ -812,7 +846,10 @@ int mrib_mld_source(struct mrib_querier* q, struct in6_addr* source) {
 
 // Get IGMP source address
 int mrib_igmp_source(struct mrib_querier* q, struct in_addr* source) {
-  struct sockaddr_in addr = {AF_INET, 0, {htobe32(INADDR_ALLHOSTS_GROUP)}, {0}};
+  struct sockaddr_in addr = {
+      .sin_family = AF_INET,
+      .sin_addr = {htobe32(INADDR_ALLHOSTS_GROUP)},
+  };
   socklen_t alen = sizeof(addr);
   struct ifreq ifr = {.ifr_name = ""};
   int sock = socket(AF_INET, SOCK_RAW | SOCK_CLOEXEC, IPPROTO_IGMP);
@@ -822,7 +859,7 @@ int mrib_igmp_source(struct mrib_querier* q, struct in_addr* source) {
 
   if (sock < 0 || ioctl(sock, SIOCGIFNAME, &ifr) ||
       setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, ifr.ifr_name,
-                 strlen(ifr.ifr_name))) {
+                 (socklen_t)strlen(ifr.ifr_name))) {
     ret = -errno;
   }
 

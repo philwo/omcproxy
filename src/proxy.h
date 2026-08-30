@@ -21,6 +21,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define PROXY_MAX_DOWNLINKS 32
+
 enum proxy_flags {
   PROXY_SCOPE_UNSPEC = 0,
 

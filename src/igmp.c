@@ -54,9 +54,12 @@ static ssize_t igmp_handle_record(struct groups* groups,
   if (r->grec_type >= UPDATE_IS_INCLUDE && r->grec_type <= UPDATE_BLOCK &&
       igmp_is_valid_group(r->grec_mca)) {
     struct in6_addr addr;
-    struct in6_addr sources[nsrc ? nsrc : 1];
+    struct in6_addr sources[QUERIER_MAX_SOURCE + 1];
     querier_map(&addr, r->grec_mca);
 
+    if (nsrc > QUERIER_MAX_SOURCE + 1) {
+      nsrc = QUERIER_MAX_SOURCE + 1;
+    }
     for (size_t i = 0; i < nsrc; ++i) {
       querier_map(&sources[i], r->grec_src[i]);
     }
@@ -126,7 +129,10 @@ void igmp_handle(struct mrib_querier* mrib,
     }
 
     if (!suppress && query->group) {
-      struct in6_addr sources[nsrc ? nsrc : 1];
+      struct in6_addr sources[QUERIER_MAX_SOURCE + 1];
+      if (nsrc > QUERIER_MAX_SOURCE + 1) {
+        nsrc = QUERIER_MAX_SOURCE + 1;
+      }
       for (size_t i = 0; i < nsrc; ++i) {
         querier_map(&sources[i], query->srcs[i]);
       }
@@ -167,7 +173,7 @@ void igmp_handle(struct mrib_querier* mrib,
         break;
       }
 
-      offset += read;
+      offset += (size_t)read;
       --count;
     }
   } else if (igmp->type == IGMPV2_HOST_MEMBERSHIP_REPORT ||
@@ -202,7 +208,7 @@ int igmp_send_query(struct querier_iface* q,
   struct igmpv3_query* query = (struct igmpv3_query*)query_buffer;
   query->type = IGMP_HOST_MEMBERSHIP_QUERY;
   query->code = qqic;
-  query->qrv = q->groups.cfg_v4.robustness;
+  query->qrv = (uint8_t)(q->groups.cfg_v4.robustness & 0x7);
   query->suppress = suppress;
   query->qqic = querier_qqic((int)(q->groups.cfg_v4.query_interval / 1000));
 
@@ -219,7 +225,7 @@ int igmp_send_query(struct querier_iface* q,
       query->srcs[cnt] = querier_unmap(&s->addr);
     }
   }
-  query->nsrcs = htons(cnt);
+  query->nsrcs = htons((uint16_t)cnt);
 
   struct sockaddr_in dest = {.sin_family = AF_INET,
                              .sin_addr = {htonl(0xe0000001U)}};

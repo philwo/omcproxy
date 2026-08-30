@@ -27,7 +27,8 @@ if(OMCPROXY_SANITIZE)
 endif()
 
 add_library(omcproxy_warnings INTERFACE)
-target_compile_options(omcproxy_warnings INTERFACE -Wall -Wextra)
+target_compile_options(omcproxy_warnings INTERFACE
+  -Wall -Wextra -Wconversion -Wshadow -Wvla -Wimplicit-fallthrough -Wformat=2)
 if(OMCPROXY_WERROR)
   target_compile_options(omcproxy_warnings INTERFACE -Werror)
 endif()

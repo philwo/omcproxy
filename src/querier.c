@@ -34,11 +34,14 @@ static void querier_announce_iface(struct querier_user_iface* user,
                                    bool enabled) {
   bool include = true;
   size_t cnt = 0;
-  struct in6_addr sources[group->source_count];
+  struct in6_addr sources[QUERIER_MAX_SOURCE];
 
   if (enabled) {
     struct group_source* source;
     group_for_each_active_source (source, group, now) {
+      if (cnt >= QUERIER_MAX_SOURCE) {
+        break;
+      }
       sources[cnt++] = source->addr;
     }
 
@@ -175,7 +178,7 @@ uint8_t querier_qqic(int qqi) {
       qqi = 0x80 | ((exp - 3) << 4) | ((qqi >> exp) & 0xf);
     }
   }
-  return qqi;
+  return (uint8_t)qqi;
 }
 
 // Calculate MRC from MRD
@@ -193,7 +196,7 @@ uint16_t querier_mrc(int mrd) {
       mrd = 0x8000 | ((exp - 3) << 12) | ((mrd >> exp) & 0xfff);
     }
   }
-  return htons(mrd);
+  return htons((uint16_t)mrd);
 }
 
 // Attach an interface to a querier-instance

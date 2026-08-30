@@ -20,6 +20,7 @@
 #pragma once
 
 #include <netinet/in.h>
+#include <stdint.h>
 #include <sys/socket.h>
 #include "list.h"
 
@@ -39,6 +40,11 @@
 #define INADDR_ALLIGMPV3RTRS_GROUP htobe32(0xe0000016U)
 
 typedef uint32_t mrib_filter;
+
+static inline mrib_filter mrib_filter_bit(size_t mifid) {
+  return (mrib_filter)(UINT32_C(1) << mifid);
+}
+
 struct mrib_iface;
 struct mrib_user;
 struct mrib_querier;

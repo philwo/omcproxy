@@ -53,10 +53,10 @@ int client_set(struct client* client,
 
   // Construct MSFILTER for outgoing IGMP / MLD
   memset(filter, 0, len);
-  filter->f.gf_interface = client->ifindex;
+  filter->f.gf_interface = (uint32_t)client->ifindex;
   filter->f.gf_fmode = include ? MCAST_INCLUDE : MCAST_EXCLUDE;
-  filter->f.gf_group.ss_family = family;
-  filter->f.gf_numsrc = cnt;
+  filter->f.gf_group.ss_family = (sa_family_t)family;
+  filter->f.gf_numsrc = (uint32_t)cnt;
 
   if (family == AF_INET) {
     client_unmap(&in_addr->sin_addr, group);
@@ -65,7 +65,7 @@ int client_set(struct client* client,
   }
 
   for (size_t i = 0; i < cnt; ++i) {
-    filter->f.gf_slist[i].ss_family = family;
+    filter->f.gf_slist[i].ss_family = (sa_family_t)family;
 
     in_addr = (struct sockaddr_in*)&filter->f.gf_slist[i];
     in6_addr = (struct sockaddr_in6*)&filter->f.gf_slist[i];
@@ -89,7 +89,7 @@ int client_set(struct client* client,
       return -errno;
     }
 
-    if (setsockopt(fd, sol, MCAST_MSFILTER, filter, len)) {
+    if (setsockopt(fd, sol, MCAST_MSFILTER, filter, (socklen_t)len)) {
       return -errno;
     }
   }

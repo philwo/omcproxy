@@ -165,7 +165,8 @@ void mld_handle(struct mrib_querier* mrib,
     ssize_t offset = sizeof(*mld_report);
 
     while (count > 0 && offset < (ssize_t)len) {
-      ssize_t read = mld_handle_record(&q->groups, &buf[offset], len - offset);
+      ssize_t read =
+          mld_handle_record(&q->groups, &buf[offset], len - (size_t)offset);
       if (read < 0) {
         break;
       }
@@ -204,8 +205,8 @@ ssize_t mld_send_query(struct querier_iface* q,
                                     0,
                                     0,
                                     {.icmp6_un_data16 = {mrc, 0}}}},
-          .s_qrv = (q->groups.cfg_v6.robustness & 0x7) |
-                   (suppress ? QUERIER_SUPPRESS : 0),
+          .s_qrv = (uint8_t)((q->groups.cfg_v6.robustness & 0x7) |
+                             (suppress ? QUERIER_SUPPRESS : 0)),
           .qqic = querier_qqic((int)(q->groups.cfg_v6.query_interval / 1000)),
       }};
 
@@ -220,9 +221,13 @@ ssize_t mld_send_query(struct querier_iface* q,
       query.addrs[cnt++] = s->addr;
     }
   }
-  query.q.nsrc = htons(cnt);
+  query.q.nsrc = htons((uint16_t)cnt);
 
-  struct sockaddr_in6 dest = {AF_INET6, 0, 0, IPV6_ALL_NODES_INIT, q->ifindex};
+  struct sockaddr_in6 dest = {
+      .sin6_family = AF_INET6,
+      .sin6_addr = IPV6_ALL_NODES_INIT,
+      .sin6_scope_id = (uint32_t)q->ifindex,
+  };
 
   if (group) {
     query.q.mld.mld_addr = dest.sin6_addr = *group;

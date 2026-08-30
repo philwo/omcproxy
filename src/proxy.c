@@ -16,7 +16,6 @@
  */
 
 #include <errno.h>
-#include <string.h>
 
 #include "list.h"
 
@@ -118,8 +117,8 @@ static int proxy_unset(struct proxy* proxyp) {
       mrib_detach_user(&proxy->mrib);
 
       struct querier_user* user;
-      struct querier_user* n;
-      list_for_each_entry_safe (user, n, &proxy->querier.ifaces, head) {
+      struct querier_user* un;
+      list_for_each_entry_safe (user, un, &proxy->querier.ifaces, head) {
         struct querier_user_iface* i =
             container_of(user, struct querier_user_iface, user);
         proxy_remove_downlink(container_of(i, struct proxy_downlink, iface));
@@ -139,6 +138,10 @@ int proxy_set(int uplink,
               const int downlinks[],
               size_t downlinks_cnt,
               enum proxy_flags flags) {
+  if (downlinks_cnt > PROXY_MAX_DOWNLINKS) {
+    return -E2BIG;
+  }
+
   struct proxy* proxy = NULL;
   struct proxy* p;
   list_for_each_entry (p, &proxies, head) {
@@ -157,8 +160,7 @@ int proxy_set(int uplink,
     return 0;
   }
 
-  bool present[downlinks_cnt];
-  memset(present, 0, sizeof(present));
+  bool present[PROXY_MAX_DOWNLINKS] = {false};
   if (!proxy) {
     proxy = calloc(1, sizeof(*proxy));
     if (!proxy) {

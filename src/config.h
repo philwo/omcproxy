@@ -21,7 +21,7 @@
 
 #include "proxy.h"
 
-#define CONFIG_MAX_DOWNLINKS 32
+#define CONFIG_MAX_DOWNLINKS PROXY_MAX_DOWNLINKS
 
 struct proxy_config {
   const char* uplink;
