@@ -837,6 +837,47 @@ static void test_startup_tries_kept_after_send_failure(void) {
   querier_detach(&user);
 }
 
+static void test_igmp_report_duplicates_do_not_crowd_out_sources(void) {
+  setup();
+  struct in6_addr grp;
+  struct in6_addr s1;
+  struct in6_addr s2;
+  addr_map(&grp, addr4("239.10.10.10"));
+  addr_map(&s1, addr4("10.0.1.1"));
+  addr_map(&s2, addr4("10.0.1.2"));
+
+  in_addr_t srcs[QUERIER_MAX_SOURCE + 2];
+  for (size_t i = 0; i < QUERIER_MAX_SOURCE + 1; ++i) {
+    srcs[i] = addr4("10.0.1.1");
+  }
+  srcs[QUERIER_MAX_SOURCE + 1] = addr4("10.0.1.2");
+  igmp_input(build_igmp_report(pkt, UPDATE_IS_INCLUDE, addr4("239.10.10.10"),
+                               srcs, QUERIER_MAX_SOURCE + 2));
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&q.groups, &grp, &s2, stub_now));
+
+  teardown();
+}
+
+static void test_mld_report_duplicates_do_not_crowd_out_sources(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::1010");
+  struct in6_addr s1 = addr("2001:db8::1");
+  struct in6_addr s2 = addr("2001:db8::2");
+
+  struct in6_addr srcs[QUERIER_MAX_SOURCE + 2];
+  for (size_t i = 0; i < QUERIER_MAX_SOURCE + 1; ++i) {
+    srcs[i] = s1;
+  }
+  srcs[QUERIER_MAX_SOURCE + 1] = s2;
+  mld_input(build_mld_report(pkt, UPDATE_IS_INCLUDE, &grp, srcs,
+                             QUERIER_MAX_SOURCE + 2));
+  CHECK(groups_includes_group(&q.groups, &grp, &s1, stub_now));
+  CHECK(groups_includes_group(&q.groups, &grp, &s2, stub_now));
+
+  teardown();
+}
+
 int main(void) {
   setlogmask(LOG_UPTO(LOG_CRIT));
   test_float8_codec();
@@ -879,5 +920,7 @@ int main(void) {
   test_igmp_zero_group_with_sources_ignored();
   test_mld_zero_group_with_sources_ignored();
   test_igmp_query_source_beyond_76_processed();
+  test_igmp_report_duplicates_do_not_crowd_out_sources();
+  test_mld_report_duplicates_do_not_crowd_out_sources();
   return test_result();
 }

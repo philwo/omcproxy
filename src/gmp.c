@@ -230,14 +230,20 @@ static ssize_t gmp_handle_record(struct groups* groups,
   if (type >= UPDATE_IS_INCLUDE && type <= UPDATE_BLOCK &&
       gmp_valid_group(family, &addr)) {
     struct in6_addr sources[QUERIER_MAX_SOURCE + 1];
-    if (nsrc > QUERIER_MAX_SOURCE + 1) {
-      nsrc = QUERIER_MAX_SOURCE + 1;
-    }
-    for (size_t i = 0; i < nsrc; ++i) {
-      gmp_load_addr(family, &sources[i], &data[hdrlen + i * alen]);
+    size_t cnt = 0;
+    for (size_t i = 0; i < nsrc && cnt < QUERIER_MAX_SOURCE + 1; ++i) {
+      struct in6_addr source;
+      gmp_load_addr(family, &source, &data[hdrlen + i * alen]);
+      bool duplicate = false;
+      for (size_t j = 0; j < cnt && !duplicate; ++j) {
+        duplicate = IN6_ARE_ADDR_EQUAL(&source, &sources[j]);
+      }
+      if (!duplicate) {
+        sources[cnt++] = source;
+      }
     }
 
-    groups_update_state(groups, &addr, nsrc ? sources : NULL, nsrc, type);
+    groups_update_state(groups, &addr, cnt ? sources : NULL, cnt, type);
   }
 
   return (ssize_t)read;

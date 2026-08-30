@@ -509,6 +509,14 @@ void groups_update_state(struct groups* groups,
   // RFC 3810 7.4
   struct list_head queried = LIST_HEAD_INIT(queried);
   for (size_t i = 0; i < len; ++i) {
+    bool duplicate = false;
+    for (size_t j = 0; j < i && !duplicate; ++j) {
+      duplicate = IN6_ARE_ADDR_EQUAL(&addrs[i], &addrs[j]);
+    }
+    if (duplicate) {
+      continue;
+    }
+
     bool* create = (include && update == UPDATE_BLOCK) ? NULL : &created;
     struct group_source* source =
         groups_get_source(groups, group, &addrs[i], create);

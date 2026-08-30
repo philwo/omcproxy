@@ -221,6 +221,22 @@ static void test_source_overflow_mid_update_falls_back_to_asm(void) {
   groups_deinit(&g);
 }
 
+static void test_duplicate_sources_in_record(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::d0d0");
+  struct in6_addr s1 = addr("2001:db8::1");
+  struct in6_addr dup[2] = {s1, s1};
+
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_IS_INCLUDE);
+  groups_update_state(&g, &grp, dup, 2, UPDATE_IS_EXCLUDE);
+
+  const struct group* group = groups_get(&g, &grp);
+  CHECK(group != NULL && group->source_count == 1);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+
+  groups_deinit(&g);
+}
+
 static void test_overdue_timer_not_postponed(void) {
   setup();
   struct in6_addr g1 = addr("ff05::aa");
@@ -702,6 +718,7 @@ int main(void) {
   test_compat_mode_ignores_block();
   test_source_overflow_falls_back_to_asm();
   test_source_overflow_mid_update_falls_back_to_asm();
+  test_duplicate_sources_in_record();
   test_overdue_timer_not_postponed();
   test_repeated_block_sends_immediate_query_keeps_counter();
   test_repeated_to_in_restarts_group_query_sequence();
