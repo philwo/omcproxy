@@ -316,6 +316,10 @@ void igmp_handle(struct mrib_querier* mrib,
       return;
     }
 
+    if (len > sizeof(*igmp) && !query->group && query->nsrcs) {
+      return;
+    }
+
     struct in_addr local;
     if (mrib_igmp_source(mrib, &local)) {
       return;
@@ -330,10 +334,10 @@ void igmp_handle(struct mrib_querier* mrib,
         .full_length = len > sizeof(*igmp),
     };
 
-    if (igmp->code) {
-      p.mrd =
-          (omgp_time_t)100 *
-          ((len == sizeof(*igmp)) ? igmp->code : gmp_float8_decode(igmp->code));
+    if (p.full_length) {
+      p.mrd = (omgp_time_t)100 * gmp_float8_decode(igmp->code);
+    } else if (igmp->code) {
+      p.mrd = (omgp_time_t)100 * igmp->code;
     }
 
     struct in6_addr sources[QUERIER_MAX_SOURCE + 1];
@@ -407,6 +411,11 @@ void mld_handle(struct mrib_querier* mrib,
       return;
     }
 
+    if (len > sizeof(struct mld_hdr) &&
+        IN6_IS_ADDR_UNSPECIFIED(&query->mld.mld_addr) && query->nsrc) {
+      return;
+    }
+
     struct in6_addr local;
     if (mrib_mld_source(mrib, &local)) {
       return;
@@ -423,8 +432,10 @@ void mld_handle(struct mrib_querier* mrib,
     };
 
     uint16_t mrc = ntohs(hdr->mld_icmp6_hdr.icmp6_dataun.icmp6_un_data16[0]);
-    if (mrc) {
-      p.mrd = p.full_length ? gmp_float16_decode(mrc) : mrc;
+    if (p.full_length) {
+      p.mrd = gmp_float16_decode(mrc);
+    } else if (mrc) {
+      p.mrd = mrc;
     }
 
     if (p.full_length) {

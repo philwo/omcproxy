@@ -162,6 +162,18 @@ static void mld_input(size_t len) {
   mld_handle(&q.mrib, (const struct mld_hdr*)pkt, len, &from);
 }
 
+static void igmp_input_from(size_t len, const char* ip) {
+  struct sockaddr_in from = {.sin_family = AF_INET};
+  from.sin_addr.s_addr = addr4(ip);
+  igmp_handle(&q.mrib, (const struct igmphdr*)pkt, len, &from);
+}
+
+static void mld_input_from(size_t len, const char* ip) {
+  struct sockaddr_in6 from = {.sin6_family = AF_INET6};
+  from.sin6_addr = addr(ip);
+  mld_handle(&q.mrib, (const struct mld_hdr*)pkt, len, &from);
+}
+
 static void test_igmp_report_exclude(void) {
   setup();
   struct in6_addr grp;
@@ -446,6 +458,54 @@ static void test_mld_send_source_specific_query(void) {
   teardown();
 }
 
+static void test_igmp_general_query_mrc_zero(void) {
+  setup();
+  size_t len = build_igmp_query(pkt, 0, NULL, 0, false);
+  pkt[1] = 0;
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(q.proto[GMP_IGMP].other_querier);
+  CHECK(q.groups.cfg_v4.query_response_interval == 0);
+  CHECK(q.proto[GMP_IGMP].next_query == stub_now + (omgp_time_t)2 * 125000);
+
+  teardown();
+}
+
+static void test_mld_general_query_mrc_zero(void) {
+  setup();
+  size_t len = build_mld_query(pkt, NULL, NULL, 0, false);
+  pkt[5] = 0;
+  mld_input_from(len, "fe80::");
+  CHECK(q.proto[GMP_MLD].other_querier);
+  CHECK(q.groups.cfg_v6.query_response_interval == 0);
+  CHECK(q.proto[GMP_MLD].next_query == stub_now + (omgp_time_t)2 * 125000);
+
+  teardown();
+}
+
+static void test_igmp_zero_group_with_sources_ignored(void) {
+  setup();
+  in_addr_t srcs[1] = {addr4("10.0.0.1")};
+  size_t len = build_igmp_query(pkt, 0, srcs, 1, false);
+  pkt[8] = 7;
+  igmp_input_from(len, "192.168.1.0");
+  CHECK(!q.proto[GMP_IGMP].other_querier);
+  CHECK(q.groups.cfg_v4.robustness == 2);
+
+  teardown();
+}
+
+static void test_mld_zero_group_with_sources_ignored(void) {
+  setup();
+  struct in6_addr srcs[1] = {addr("2001:db8::1")};
+  size_t len = build_mld_query(pkt, NULL, srcs, 1, false);
+  pkt[24] = 7;
+  mld_input_from(len, "fe80::");
+  CHECK(!q.proto[GMP_MLD].other_querier);
+  CHECK(q.groups.cfg_v6.robustness == 2);
+
+  teardown();
+}
+
 static void test_float8_codec(void) {
   CHECK(gmp_float8_decode(0) == 0);
   CHECK(gmp_float8_decode(127) == 127);
@@ -617,5 +677,9 @@ int main(void) {
   test_mld_query_updates_source_timers();
   test_mld_query_suppress_respected();
   test_mld_send_source_specific_query();
+  test_igmp_general_query_mrc_zero();
+  test_mld_general_query_mrc_zero();
+  test_igmp_zero_group_with_sources_ignored();
+  test_mld_zero_group_with_sources_ignored();
   return test_result();
 }
