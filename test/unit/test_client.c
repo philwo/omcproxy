@@ -265,6 +265,32 @@ static void test_msfilter_uses_group_filter_size(void) {
   teardown();
 }
 
+static void test_msfilter_widening_failure_fails_open(void) {
+  setup();
+  struct in6_addr grp = addr6("ff3e::2");
+  struct in6_addr srcs[2] = {addr6("2001:db8::1"), addr6("2001:db8::2")};
+
+  client_set(&c, &grp, true, srcs, 1);
+  int filters = msfilter_calls;
+
+  msfilter_fail_count = 1;
+  msfilter_fail_errno = ENOBUFS;
+  client_set(&c, &grp, true, srcs, 2);
+  CHECK(msfilter_calls == filters + 2);
+  CHECK(msfilter_last_numsrc == 0);
+  CHECK(msfilter_last_optlen == GROUP_FILTER_SIZE(0));
+
+  stub_advance(2 * OMGP_TIME_PER_SECOND);
+  CHECK(msfilter_last_numsrc == 2);
+
+  int narrowed = msfilter_calls;
+  msfilter_fail_count = 1;
+  client_set(&c, &grp, true, srcs, 1);
+  CHECK(msfilter_calls == narrowed + 1);
+
+  teardown();
+}
+
 static void test_msfilter_failure_keeps_join_and_retries(void) {
   setup();
   struct in6_addr grp = addr6("ff3e::99");
@@ -310,6 +336,7 @@ int main(void) {
   test_socket_pool_grows_on_enobufs();
   test_unrelated_updates_keep_retry_deadline();
   test_msfilter_uses_group_filter_size();
+  test_msfilter_widening_failure_fails_open();
   test_msfilter_failure_keeps_join_and_retries();
   test_join_failure_retries();
   test_second_socket_failure_closes_first_socket();

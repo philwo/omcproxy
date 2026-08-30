@@ -182,9 +182,72 @@ static int client_membership_filter(struct client* client,
   return 0;
 }
 
+static bool client_sources_contain(const struct in6_addr* sources,
+                                   size_t cnt,
+                                   const struct in6_addr* addr) {
+  for (size_t i = 0; i < cnt; ++i) {
+    if (IN6_ARE_ADDR_EQUAL(&sources[i], addr)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Whether the applied kernel filter accepts everything the desired filter
+// accepts
+static bool client_filter_covers(const struct client_membership* m) {
+  if (!m->applied_include && m->include) {
+    for (size_t i = 0; i < m->applied_cnt; ++i) {
+      if (client_sources_contain(m->sources, m->cnt, &m->applied[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (!m->applied_include && !m->include) {
+    for (size_t i = 0; i < m->applied_cnt; ++i) {
+      if (!client_sources_contain(m->sources, m->cnt, &m->applied[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (m->applied_include && m->include) {
+    for (size_t i = 0; i < m->cnt; ++i) {
+      if (!client_sources_contain(m->applied, m->applied_cnt, &m->sources[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  return false;
+}
+
+static int client_membership_fail_open(struct client* client,
+                                       struct client_membership* m) {
+  int family = client_family(&m->group);
+  int sol = (family == AF_INET) ? SOL_IP : SOL_IPV6;
+  struct group_filter filter = {.gf_interface = (uint32_t)client->ifindex,
+                                .gf_fmode = MCAST_EXCLUDE};
+  client_fill_addr(&filter.gf_group, family, &m->group);
+
+  if (setsockopt(m->sock->fd, sol, MCAST_MSFILTER, &filter,
+                 GROUP_FILTER_SIZE(0))) {
+    return -errno;
+  }
+
+  m->applied_include = false;
+  m->applied_cnt = 0;
+  return 0;
+}
+
 // Drive the kernel state towards the desired state; keep the membership
-// dirty for a retry when a step fails. A failed filter update keeps the
-// current (broader) kernel filter rather than dropping the membership.
+// dirty for a retry when a step fails. When a failed filter update would
+// leave a kernel filter that blocks desired traffic, fall back to an
+// exclude-nothing filter.
 static void client_membership_apply(struct client* client,
                                     struct client_membership* m) {
   char addrbuf[INET6_ADDRSTRLEN];
@@ -221,6 +284,10 @@ static void client_membership_apply(struct client* client,
            addrbuf, client->ifindex, strerror(-res),
            (res == -ENOBUFS) ? " (check igmp_max_msf?)" : "");
     m->dirty = true;
+    if (!client_filter_covers(m) && client_membership_fail_open(client, m)) {
+      L_WARN("%s: failed to fail open for %s on %d", __FUNCTION__, addrbuf,
+             client->ifindex);
+    }
     return;
   }
 
