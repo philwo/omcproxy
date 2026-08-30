@@ -449,6 +449,33 @@ static void test_nocache_program_failure_leaves_no_state(void) {
   teardown();
 }
 
+static void test_refresh_failure_drops_route(void) {
+  setup();
+  struct in6_addr group = addr6("::ffff:239.7.7.7");
+  struct in6_addr source = addr6("::ffff:10.0.7.2");
+
+  inject_mrt(IGMPMSG_NOCACHE, 0, "10.0.7.2", "239.7.7.7");
+  struct mfc_entry* e = mfc_find(&group, &source);
+  CHECK(e != NULL);
+  if (e) {
+    CHECK(e->oifs == mrib_filter_bit(1));
+  }
+
+  add_mfc_fail_count = 1;
+  mrib_refresh(&uplink, &group);
+  CHECK(mfc_find(&group, &source) == NULL);
+
+  inject_mrt(IGMPMSG_NOCACHE, 0, "10.0.7.2", "239.7.7.7");
+  e = mfc_find(&group, &source);
+  CHECK(e != NULL);
+  if (e) {
+    CHECK(e->parent == 0);
+    CHECK(e->oifs == mrib_filter_bit(1));
+  }
+
+  teardown();
+}
+
 static void test_repeated_nocache_keeps_single_route(void) {
   setup();
   struct in6_addr group = addr6("::ffff:239.6.6.6");
@@ -677,6 +704,7 @@ int main(void) {
   test_wrongvif_from_downlink_keeps_parent();
   test_wrongvif_reparent_failure_keeps_owner();
   test_nocache_program_failure_leaves_no_state();
+  test_refresh_failure_drops_route();
   test_repeated_nocache_keeps_single_route();
   test_wrongvif_for_untracked_route_is_ignored();
   test_wrongvif_between_uplinks_keeps_parent();

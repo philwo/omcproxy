@@ -219,15 +219,20 @@ static int mrib_program_route(struct mrib_iface* iface,
   return mrib_set(group, source, iface, filter, 0);
 }
 
-// Evict the interface's oldest route to make room for a new one
-static void mrib_evict_route(struct mrib_iface* iface) {
-  struct mrib_route* route =
-      list_first_entry(&iface->routes, struct mrib_route, head);
+// Remove a route from the kernel and from tracking
+static void mrib_drop_route(struct mrib_iface* iface,
+                            struct mrib_route* route) {
   mrib_set(&route->group, &route->source, iface, 0, 1);
   list_del(&route->head);
   free(route);
   --iface->route_count;
   --mrib_route_count;
+}
+
+// Evict the interface's oldest route to make room for a new one
+static void mrib_evict_route(struct mrib_iface* iface) {
+  mrib_drop_route(iface,
+                  list_first_entry(&iface->routes, struct mrib_route, head));
 }
 
 // Evict the route closest to expiry across all interfaces
@@ -382,7 +387,8 @@ void mrib_refresh(struct mrib_user* user, const struct in6_addr* group) {
   }
 
   struct mrib_route* route;
-  list_for_each_entry (route, &iface->routes, head) {
+  struct mrib_route* n;
+  list_for_each_entry_safe (route, n, &iface->routes, head) {
     if (!IN6_ARE_ADDR_EQUAL(&route->group, group)) {
       continue;
     }
@@ -392,7 +398,11 @@ void mrib_refresh(struct mrib_user* user, const struct in6_addr* group) {
     inet_ntop(AF_INET6, &route->source, sourcebuf, sizeof(sourcebuf));
     L_DEBUG("%s: reconciling oifs for %s from %s after membership change",
             __FUNCTION__, groupbuf, sourcebuf);
-    mrib_program_route(iface, &route->group, &route->source);
+    if (mrib_program_route(iface, &route->group, &route->source)) {
+      L_WARN("%s: failed to reprogram %s from %s, dropping the route",
+             __FUNCTION__, groupbuf, sourcebuf);
+      mrib_drop_route(iface, route);
+    }
   }
 }
 
