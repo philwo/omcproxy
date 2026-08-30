@@ -44,12 +44,19 @@ struct group_source {
   int retransmit;
 };
 
+enum groups_query_result {
+  GROUPS_QUERY_FAILED = -1,
+  GROUPS_QUERY_SENT = 0,
+  GROUPS_QUERY_SKIPPED = 1,
+};
+
 struct groups;
 
-typedef void groups_query_cb(struct groups* groups,
-                             const struct in6_addr* addr,
-                             const struct list_head* sources,
-                             bool suppress);
+typedef enum groups_query_result groups_query_cb(
+    struct groups* groups,
+    const struct in6_addr* addr,
+    const struct list_head* sources,
+    bool suppress);
 typedef void groups_update_cb(struct groups* groups,
                               struct group* group,
                               omgp_time_t now);

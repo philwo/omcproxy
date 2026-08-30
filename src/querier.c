@@ -70,10 +70,11 @@ static void querier_announce_change(struct groups* groups,
 }
 
 // Send query for a group + sources (called by a group-state as callback)
-static void querier_send_query(struct groups* groups,
-                               const struct in6_addr* group,
-                               const struct list_head* sources,
-                               bool suppress) {
+static enum groups_query_result querier_send_query(
+    struct groups* groups,
+    const struct in6_addr* group,
+    const struct list_head* sources,
+    bool suppress) {
   struct querier_iface* iface =
       container_of(groups, struct querier_iface, groups);
   char addrbuf[ADDR_BUFLEN];
@@ -83,9 +84,12 @@ static void querier_send_query(struct groups* groups,
           (!sources) ? "group" : "source", addrbuf, iface->ifindex, suppress);
 
   enum gmp_family family = IN6_IS_ADDR_V4MAPPED(group) ? GMP_IGMP : GMP_MLD;
-  if (!iface->proto[family].other_querier) {
-    gmp_send_query(iface, family, group, sources, suppress);
+  if (iface->proto[family].other_querier) {
+    return GROUPS_QUERY_SKIPPED;
   }
+  return (gmp_send_query(iface, family, group, sources, suppress) == 0)
+             ? GROUPS_QUERY_SENT
+             : GROUPS_QUERY_FAILED;
 }
 
 // Expire interface timers and send queries (called by timer as callback)

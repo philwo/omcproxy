@@ -75,6 +75,24 @@ static void groups_remove_group(struct groups* groups,
   --groups->group_count;
 }
 
+static void finish_source_batch(struct group* group,
+                                struct list_head* batch,
+                                enum groups_query_result result,
+                                omgp_time_t next_transmit) {
+  struct group_source* source;
+  list_for_each_entry (source, batch, head) {
+    if (result == GROUPS_QUERY_SENT) {
+      --source->retransmit;
+    } else if (result == GROUPS_QUERY_SKIPPED) {
+      source->retransmit = 0;
+    }
+    if (source->retransmit > 0) {
+      group->next_source_transmit = next_transmit;
+    }
+  }
+  list_splice_init(batch, &group->sources);
+}
+
 // Expire a group and / or its associated sources depending on the current time
 static omgp_time_t expire_group(struct groups* groups,
                                 struct group* group,
@@ -99,36 +117,30 @@ static omgp_time_t expire_group(struct groups* groups,
       if (s->retransmit > 0) {
         list_move_tail(&s->head,
                        (s->include_until > llqt) ? &suppressed : &unsuppressed);
-        --s->retransmit;
-      }
-
-      if (s->retransmit > 0) {
-        group->next_source_transmit = llqi;
       }
     }
-  }
-
-  if (group->next_source_transmit > 0 &&
-      group->next_source_transmit < next_event) {
-    next_event = group->next_source_transmit;
   }
 
   // Handle group-specific query retransmission
   if (group->retransmit > 0 && group->next_generic_transmit <= now) {
     group->next_generic_transmit = 0;
 
-    if (groups->cb_query) {
-      groups->cb_query(groups, &group->addr, NULL, group->exclude_until > llqt);
+    enum groups_query_result result =
+        groups->cb_query ? groups->cb_query(groups, &group->addr, NULL,
+                                            group->exclude_until > llqt)
+                         : GROUPS_QUERY_SENT;
+    if (result == GROUPS_QUERY_SENT) {
+      --group->retransmit;
+    } else if (result == GROUPS_QUERY_SKIPPED) {
+      group->retransmit = 0;
     }
-
-    --group->retransmit;
 
     if (group->retransmit > 0) {
       group->next_generic_transmit = llqi;
     }
 
     // Skip suppresed source-specific query (RFC 3810 7.6.3.2)
-    list_splice_init(&suppressed, &group->sources);
+    finish_source_batch(group, &suppressed, result, llqi);
   }
 
   if (group->next_generic_transmit > 0 &&
@@ -137,19 +149,24 @@ static omgp_time_t expire_group(struct groups* groups,
   }
 
   if (!list_empty(&suppressed)) {
-    if (groups->cb_query) {
-      groups->cb_query(groups, &group->addr, &suppressed, true);
-    }
-
-    list_splice(&suppressed, &group->sources);
+    enum groups_query_result result =
+        groups->cb_query
+            ? groups->cb_query(groups, &group->addr, &suppressed, true)
+            : GROUPS_QUERY_SENT;
+    finish_source_batch(group, &suppressed, result, llqi);
   }
 
   if (!list_empty(&unsuppressed)) {
-    if (groups->cb_query) {
-      groups->cb_query(groups, &group->addr, &unsuppressed, false);
-    }
+    enum groups_query_result result =
+        groups->cb_query
+            ? groups->cb_query(groups, &group->addr, &unsuppressed, false)
+            : GROUPS_QUERY_SENT;
+    finish_source_batch(group, &unsuppressed, result, llqi);
+  }
 
-    list_splice(&unsuppressed, &group->sources);
+  if (group->next_source_transmit > 0 &&
+      group->next_source_transmit < next_event) {
+    next_event = group->next_source_transmit;
   }
 
   // Handle source and group expiry
