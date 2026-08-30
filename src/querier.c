@@ -82,11 +82,9 @@ static void querier_send_query(struct groups* groups,
   L_DEBUG("%s: sending %s-specific query for %s on %d (S: %d)", __FUNCTION__,
           (!sources) ? "group" : "source", addrbuf, iface->ifindex, suppress);
 
-  bool v4 = IN6_IS_ADDR_V4MAPPED(group);
-  if (v4 && !iface->proto[GMP_IGMP].other_querier) {
-    igmp_send_query(iface, group, sources, suppress);
-  } else if (!v4 && !iface->proto[GMP_MLD].other_querier) {
-    mld_send_query(iface, group, sources, suppress);
+  enum gmp_family family = IN6_IS_ADDR_V4MAPPED(group) ? GMP_IGMP : GMP_MLD;
+  if (!iface->proto[family].other_querier) {
+    gmp_send_query(iface, family, group, sources, suppress);
   }
 }
 
@@ -97,36 +95,32 @@ static void querier_iface_timer(struct ev_timer* timeout) {
   omgp_time_t now = omgp_time();
   omgp_time_t next_event = now + 3600 * OMGP_TIME_PER_SECOND;
 
-  for (int family = GMP_IGMP; family <= GMP_MLD; ++family) {
-    struct querier_proto* protocol = &iface->proto[family];
-    struct groups_config* config =
+  for (enum gmp_family family = GMP_IGMP; family <= GMP_MLD; ++family) {
+    struct querier_proto* p = &iface->proto[family];
+    struct groups_config* cfg =
         (family == GMP_MLD) ? &iface->groups.cfg_v6 : &iface->groups.cfg_v4;
 
-    if (protocol->next_query <= now) {
-      if (protocol->other_querier) {
-        *config = iface->cfg;
-        protocol->other_querier = false;
+    if (p->next_query <= now) {
+      // If the other querier is gone, reset interface config
+      if (p->other_querier) {
+        *cfg = iface->cfg;
+        p->other_querier = false;
       }
 
-      if (family == GMP_MLD) {
-        mld_send_query(iface, NULL, NULL, false);
-      } else {
-        igmp_send_query(iface, NULL, NULL, false);
-      }
+      gmp_send_query(iface, family, NULL, NULL, false);
       L_DEBUG("%s: sending generic %s-query on %d (S: 0)", __FUNCTION__,
               (family == GMP_MLD) ? "MLD" : "IGMP", iface->ifindex);
 
-      if (protocol->startup_tries > 0) {
-        --protocol->startup_tries;
+      if (p->startup_tries > 0) {
+        --p->startup_tries;
       }
 
-      protocol->next_query =
-          now + ((protocol->startup_tries > 0) ? (config->query_interval / 4)
-                                               : config->query_interval);
+      p->next_query = now + ((p->startup_tries > 0) ? (cfg->query_interval / 4)
+                                                    : cfg->query_interval);
     }
 
-    if (protocol->next_query < next_event) {
-      next_event = protocol->next_query;
+    if (p->next_query < next_event) {
+      next_event = p->next_query;
     }
   }
 

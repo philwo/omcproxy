@@ -21,12 +21,11 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <stdbool.h>
-
 #include <string.h>
-#include "ev.h"
-#include "gmp.h"
 #include "list.h"
 
+#include "ev.h"
+#include "gmp.h"
 #include "groups.h"
 #include "mrib.h"
 
@@ -91,32 +90,3 @@ struct querier {
 #define QUERIER_MAX_SOURCE 75
 #define QUERIER_MAX_GROUPS 256
 #define QUERIER_SUPPRESS (1 << 3)
-
-static inline in_addr_t querier_unmap(const struct in6_addr* addr6) {
-  return addr6->s6_addr32[3];
-}
-
-static inline void querier_map(struct in6_addr* addr6, in_addr_t addr4) {
-  addr6->s6_addr32[0] = 0;
-  addr6->s6_addr32[1] = 0;
-  addr6->s6_addr32[2] = htobe32(0xffff);
-  addr6->s6_addr32[3] = addr4;
-}
-
-void igmp_handle(struct mrib_querier* mrib,
-                 const struct igmphdr* igmp,
-                 size_t len,
-                 const struct sockaddr_in* from);
-int igmp_send_query(struct querier_iface* q,
-                    const struct in6_addr* group,
-                    const struct list_head* sources,
-                    bool suppress);
-
-void mld_handle(struct mrib_querier* mrib,
-                const struct mld_hdr* hdr,
-                size_t len,
-                const struct sockaddr_in6* from);
-ssize_t mld_send_query(struct querier_iface* q,
-                       const struct in6_addr* group,
-                       const struct list_head* sources,
-                       bool suppress);

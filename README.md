@@ -32,6 +32,8 @@ customer-originated multicast anyway.
 
 - C23, no external dependencies (libubox is replaced by a small epoll and
   timerfd event loop and a vendored intrusive list header)
+- One shared wire codec for IGMPv3 and MLDv2 with a unit-tested record
+  parser, checksum, and query timer codecs
 - Unit tests, network-namespace integration tests, sanitizer builds, a
   libFuzzer harness for the packet parsers, and a strict warning set,
   all wired into CI

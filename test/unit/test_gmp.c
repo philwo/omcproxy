@@ -4,6 +4,7 @@
 #include <string.h>
 #include <syslog.h>
 
+#include "src/addr.h"
 #include "src/gmp.h"
 #include "src/querier.h"
 
@@ -131,24 +132,24 @@ static size_t build_mld_report(uint8_t* buf,
 }
 
 static size_t build_mld_query(uint8_t* buf,
-                              const struct in6_addr* group,
-                              const struct in6_addr* sources,
-                              size_t source_count,
+                              const struct in6_addr* grp,
+                              const struct in6_addr* srcs,
+                              size_t nsrc,
                               bool suppress) {
-  memset(buf, 0, 28 + 16 * source_count);
+  memset(buf, 0, 28 + 16 * nsrc);
   buf[0] = 130;
   buf[4] = 0;
   buf[5] = 100;
-  if (group) {
-    memcpy(&buf[8], group, 16);
+  if (grp) {
+    memcpy(&buf[8], grp, 16);
   }
   buf[24] = 2 | (suppress ? 0x8 : 0);
-  buf[26] = (uint8_t)(source_count >> 8);
-  buf[27] = (uint8_t)source_count;
-  for (size_t i = 0; i < source_count; ++i) {
-    memcpy(&buf[28 + 16 * i], &sources[i], 16);
+  buf[26] = (uint8_t)(nsrc >> 8);
+  buf[27] = (uint8_t)nsrc;
+  for (size_t i = 0; i < nsrc; ++i) {
+    memcpy(&buf[28 + 16 * i], &srcs[i], 16);
   }
-  return 28 + 16 * source_count;
+  return 28 + 16 * nsrc;
 }
 
 static void igmp_input(size_t len) {
@@ -165,8 +166,8 @@ static void test_igmp_report_exclude(void) {
   setup();
   struct in6_addr grp;
   struct in6_addr any;
-  querier_map(&grp, addr4("239.1.2.3"));
-  querier_map(&any, addr4("10.0.0.1"));
+  addr_map(&grp, addr4("239.1.2.3"));
+  addr_map(&any, addr4("10.0.0.1"));
 
   igmp_input(
       build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.1.2.3"), NULL, 0));
@@ -181,10 +182,10 @@ static void test_igmp_report_include_sources(void) {
   struct in6_addr s1;
   struct in6_addr s2;
   struct in6_addr s3;
-  querier_map(&grp, addr4("232.1.1.1"));
-  querier_map(&s1, addr4("10.0.0.1"));
-  querier_map(&s2, addr4("10.0.0.2"));
-  querier_map(&s3, addr4("10.0.0.3"));
+  addr_map(&grp, addr4("232.1.1.1"));
+  addr_map(&s1, addr4("10.0.0.1"));
+  addr_map(&s2, addr4("10.0.0.2"));
+  addr_map(&s3, addr4("10.0.0.3"));
 
   in_addr_t srcs[2] = {addr4("10.0.0.1"), addr4("10.0.0.2")};
   igmp_input(
@@ -199,7 +200,7 @@ static void test_igmp_report_include_sources(void) {
 static void test_igmp_report_truncated(void) {
   setup();
   struct in6_addr grp;
-  querier_map(&grp, addr4("239.1.2.3"));
+  addr_map(&grp, addr4("239.1.2.3"));
 
   size_t len =
       build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.1.2.3"), NULL, 0);
@@ -216,7 +217,7 @@ static void test_igmp_report_truncated(void) {
 static void test_igmp_v2_report_and_leave(void) {
   setup();
   struct in6_addr grp;
-  querier_map(&grp, addr4("239.5.5.5"));
+  addr_map(&grp, addr4("239.5.5.5"));
 
   memset(pkt, 0, 8);
   pkt[0] = 0x16;
@@ -237,8 +238,8 @@ static void test_igmp_query_updates_source_timers(void) {
   setup();
   struct in6_addr grp;
   struct in6_addr s1;
-  querier_map(&grp, addr4("232.7.7.7"));
-  querier_map(&s1, addr4("10.0.0.7"));
+  addr_map(&grp, addr4("232.7.7.7"));
+  addr_map(&s1, addr4("10.0.0.7"));
 
   in_addr_t srcs[1] = {addr4("10.0.0.7")};
   igmp_input(
@@ -255,7 +256,7 @@ static void test_igmp_query_updates_source_timers(void) {
 static void test_igmp_query_suppress_respected(void) {
   setup();
   struct in6_addr grp;
-  querier_map(&grp, addr4("239.8.8.8"));
+  addr_map(&grp, addr4("239.8.8.8"));
 
   igmp_input(
       build_igmp_report(pkt, UPDATE_IS_EXCLUDE, addr4("239.8.8.8"), NULL, 0));
@@ -268,7 +269,7 @@ static void test_igmp_query_suppress_respected(void) {
 
 static void test_igmp_send_general_query(void) {
   setup();
-  CHECK(igmp_send_query(&q, NULL, NULL, false) == 0);
+  CHECK(gmp_send_query(&q, GMP_IGMP, NULL, NULL, false) == 0);
   CHECK(stub_sent_family == 4);
   CHECK(stub_sent_len == 12);
   CHECK(stub_sent[0] == 0x11);
@@ -278,23 +279,23 @@ static void test_igmp_send_general_query(void) {
 
 static void test_igmp_send_source_specific_query(void) {
   setup();
-  struct in6_addr group;
-  querier_map(&group, addr4("232.9.9.9"));
+  struct in6_addr grp;
+  addr_map(&grp, addr4("232.9.9.9"));
 
-  struct group_source first = {.addr = {{{0}}}};
-  struct group_source second = {.addr = {{{0}}}};
-  querier_map(&first.addr, addr4("10.0.0.1"));
-  querier_map(&second.addr, addr4("10.0.0.2"));
+  struct group_source s1 = {.addr = {{{0}}}};
+  struct group_source s2 = {.addr = {{{0}}}};
+  addr_map(&s1.addr, addr4("10.0.0.1"));
+  addr_map(&s2.addr, addr4("10.0.0.2"));
   struct list_head sources = LIST_HEAD_INIT(sources);
-  list_add_tail(&first.head, &sources);
-  list_add_tail(&second.head, &sources);
+  list_add_tail(&s1.head, &sources);
+  list_add_tail(&s2.head, &sources);
 
-  CHECK(igmp_send_query(&q, &group, &sources, false) == 0);
+  CHECK(gmp_send_query(&q, GMP_IGMP, &grp, &sources, false) == 0);
   CHECK(stub_sent_family == 4);
   CHECK(stub_sent_len == 12 + 2 * 4);
   CHECK(stub_sent[10] == 0 && stub_sent[11] == 2);
-  CHECK(memcmp(&stub_sent[12], &first.addr.s6_addr32[3], 4) == 0);
-  CHECK(memcmp(&stub_sent[16], &second.addr.s6_addr32[3], 4) == 0);
+  CHECK(memcmp(&stub_sent[12], &s1.addr.s6_addr32[3], 4) == 0);
+  CHECK(memcmp(&stub_sent[16], &s2.addr.s6_addr32[3], 4) == 0);
 
   teardown();
 }
@@ -356,27 +357,27 @@ static void test_mld_v1_report_and_done(void) {
 
 static void test_mld_query_updates_source_timers(void) {
   setup();
-  struct in6_addr group = addr("ff35::8000:7");
-  struct in6_addr sources[1] = {addr("2001:db8::7")};
+  struct in6_addr grp = addr("ff35::8000:7");
+  struct in6_addr srcs[1] = {addr("2001:db8::7")};
 
-  mld_input(build_mld_report(pkt, UPDATE_IS_INCLUDE, &group, sources, 1));
-  CHECK(groups_includes_group(&q.groups, &group, &sources[0], stub_now));
+  mld_input(build_mld_report(pkt, UPDATE_IS_INCLUDE, &grp, srcs, 1));
+  CHECK(groups_includes_group(&q.groups, &grp, &srcs[0], stub_now));
 
-  mld_input(build_mld_query(pkt, &group, sources, 1, false));
+  mld_input(build_mld_query(pkt, &grp, srcs, 1, false));
   stub_advance(3 * OMGP_TIME_PER_SECOND);
-  CHECK(groups_get(&q.groups, &group) == NULL);
+  CHECK(groups_get(&q.groups, &grp) == NULL);
 
   teardown();
 }
 
 static void test_mld_query_suppress_respected(void) {
   setup();
-  struct in6_addr group = addr("ff05::8888");
+  struct in6_addr grp = addr("ff05::8888");
 
-  mld_input(build_mld_report(pkt, UPDATE_IS_EXCLUDE, &group, NULL, 0));
-  mld_input(build_mld_query(pkt, &group, NULL, 0, true));
+  mld_input(build_mld_report(pkt, UPDATE_IS_EXCLUDE, &grp, NULL, 0));
+  mld_input(build_mld_query(pkt, &grp, NULL, 0, true));
   stub_advance(3 * OMGP_TIME_PER_SECOND);
-  CHECK(groups_get(&q.groups, &group) != NULL);
+  CHECK(groups_get(&q.groups, &grp) != NULL);
 
   teardown();
 }
@@ -391,7 +392,7 @@ static void test_mld_send_source_specific_query(void) {
   list_add_tail(&s1.head, &sources);
   list_add_tail(&s2.head, &sources);
 
-  CHECK(mld_send_query(&q, &grp, &sources, false) == 0);
+  CHECK(gmp_send_query(&q, GMP_MLD, &grp, &sources, false) == 0);
   CHECK(stub_sent_family == 6);
   CHECK(stub_sent_len == 28 + 2 * 16);
   CHECK(stub_sent[26] == 0 && stub_sent[27] == 2);
@@ -411,10 +412,10 @@ static void test_float8_codec(void) {
   CHECK(gmp_float8_encode(248) == 0x8f);
   CHECK(gmp_float8_encode(31744) == 0xff);
   CHECK(gmp_float8_encode(1000000) == 0xff);
-  for (int value = 1; value < 40000; value += 7) {
-    int round_trip = gmp_float8_decode(gmp_float8_encode(value));
-    CHECK(round_trip <= value || value > 31744);
-    CHECK(round_trip > value / 2);
+  for (int v = 1; v < 40000; v += 7) {
+    int rt = gmp_float8_decode(gmp_float8_encode(v));
+    CHECK(rt <= v || v > 31744);
+    CHECK(rt > v / 2);
   }
 }
 
@@ -427,18 +428,18 @@ static void test_float16_codec(void) {
   CHECK(gmp_float16_encode(65528) == 0x8fff);
   CHECK(gmp_float16_encode(8387584) == 0xffff);
   CHECK(gmp_float16_encode(100000000) == 0xffff);
-  for (int value = 1; value < 9000000; value += 1009) {
-    int round_trip = gmp_float16_decode(gmp_float16_encode(value));
-    CHECK(round_trip <= value || value > 8387584);
-    CHECK(round_trip > value / 2);
+  for (int v = 1; v < 9000000; v += 1009) {
+    int rt = gmp_float16_decode(gmp_float16_encode(v));
+    CHECK(rt <= v || v > 8387584);
+    CHECK(rt > v / 2);
   }
 }
 
 static void test_checksum_even_length_self_verifies(void) {
-  uint8_t data[12] = {0x11, 0x64};
-  uint16_t csum = gmp_checksum(data, sizeof(data));
-  memcpy(&data[2], &csum, 2);
-  CHECK(gmp_checksum(data, sizeof(data)) == 0);
+  uint8_t query[12] = {0x11, 0x64};
+  uint16_t csum = gmp_checksum(query, sizeof(query));
+  memcpy(&query[2], &csum, 2);
+  CHECK(gmp_checksum(query, sizeof(query)) == 0);
 }
 
 static void test_checksum_odd_length_self_verifies(void) {

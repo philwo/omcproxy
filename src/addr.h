@@ -17,8 +17,20 @@
 
 #pragma once
 
+#include <endian.h>
 #include <netinet/in.h>
 
 #define ADDR_BUFLEN INET6_ADDRSTRLEN
 
 const char* addr_ntop(char* buf, size_t len, const struct in6_addr* addr);
+
+static inline void addr_map(struct in6_addr* addr6, in_addr_t addr4) {
+  addr6->s6_addr32[0] = 0;
+  addr6->s6_addr32[1] = 0;
+  addr6->s6_addr32[2] = htobe32(0xffff);
+  addr6->s6_addr32[3] = addr4;
+}
+
+static inline in_addr_t addr_unmap(const struct in6_addr* addr6) {
+  return addr6->s6_addr32[3];
+}

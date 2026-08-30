@@ -41,8 +41,6 @@ add_library(omcproxy_core OBJECT
   src/ev.c
   src/gmp.c
   src/groups.c
-  src/igmp.c
-  src/mld.c
   src/mrib.c
   src/proxy.c
   src/querier.c

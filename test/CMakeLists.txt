@@ -56,8 +56,11 @@ add_test(NAME proxy COMMAND test_proxy)
 add_executable(test_mrib
   unit/test_mrib.c
   unit/ev_stub.c
+  ${CMAKE_SOURCE_DIR}/src/addr.c
   ${CMAKE_SOURCE_DIR}/src/gmp.c
+  ${CMAKE_SOURCE_DIR}/src/groups.c
   ${CMAKE_SOURCE_DIR}/src/mrib.c
+  ${CMAKE_SOURCE_DIR}/src/querier.c
 )
 target_include_directories(test_mrib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(test_mrib PRIVATE omcproxy_build omcproxy_warnings)
@@ -76,8 +79,6 @@ add_executable(test_gmp
   ${CMAKE_SOURCE_DIR}/src/addr.c
   ${CMAKE_SOURCE_DIR}/src/gmp.c
   ${CMAKE_SOURCE_DIR}/src/groups.c
-  ${CMAKE_SOURCE_DIR}/src/igmp.c
-  ${CMAKE_SOURCE_DIR}/src/mld.c
   ${CMAKE_SOURCE_DIR}/src/querier.c
 )
 target_include_directories(test_gmp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
@@ -91,9 +92,8 @@ if(OMCPROXY_FUZZ)
     unit/ev_stub.c
     unit/mrib_stub.c
     ${CMAKE_SOURCE_DIR}/src/addr.c
+    ${CMAKE_SOURCE_DIR}/src/gmp.c
     ${CMAKE_SOURCE_DIR}/src/groups.c
-    ${CMAKE_SOURCE_DIR}/src/igmp.c
-    ${CMAKE_SOURCE_DIR}/src/mld.c
     ${CMAKE_SOURCE_DIR}/src/querier.c
   )
   target_include_directories(fuzz_gmp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
