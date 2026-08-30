@@ -219,5 +219,5 @@ int main(int argc, char** argv) {
   uloop_signal_delete(&sigterm);
   uloop_signal_delete(&sigint);
   uloop_done();
-  return 0;
+  return start ? 0 : 1;
 }
