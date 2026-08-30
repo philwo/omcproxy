@@ -53,6 +53,22 @@ target_include_directories(test_proxy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
 target_link_libraries(test_proxy PRIVATE omcproxy_build omcproxy_warnings)
 add_test(NAME proxy COMMAND test_proxy)
 
+add_executable(test_mrib
+  unit/test_mrib.c
+  unit/ev_stub.c
+  ${CMAKE_SOURCE_DIR}/src/gmp.c
+  ${CMAKE_SOURCE_DIR}/src/mrib.c
+)
+target_include_directories(test_mrib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/unit)
+target_link_libraries(test_mrib PRIVATE omcproxy_build omcproxy_warnings)
+target_link_options(test_mrib PRIVATE
+  -Wl,--wrap=socket
+  -Wl,--wrap=setsockopt
+  -Wl,--wrap=close
+  -Wl,--wrap=recvmsg
+)
+add_test(NAME mrib COMMAND test_mrib)
+
 add_executable(test_gmp
   unit/test_gmp.c
   unit/ev_stub.c

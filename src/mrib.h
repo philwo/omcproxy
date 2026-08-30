@@ -94,6 +94,8 @@ int mrib_attach_querier(struct mrib_querier* querier,
 // Deregister a querier from mrib
 void mrib_detach_querier(struct mrib_querier* querier);
 
+void mrib_refresh(struct mrib_user* user, const struct in6_addr* group);
+
 // Add interface to filter
 int mrib_filter_add(mrib_filter* filter, struct mrib_user* user);
 

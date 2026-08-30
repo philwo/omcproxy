@@ -102,6 +102,9 @@ static void proxy_trigger(struct querier_user_iface* user,
       container_of(user, struct proxy_downlink, iface);
   if (proxy_match_scope(iface->flags, group)) {
     client_set(&iface->client, group, include, sources, len);
+    struct proxy* proxy =
+        container_of(user->user.querier, struct proxy, querier);
+    mrib_refresh(&proxy->mrib, group);
   }
 }
 

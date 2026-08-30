@@ -1,6 +1,8 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#include <arpa/inet.h>
+
 #include "src/client.h"
 #include "src/groups.h"
 #include "src/mrib.h"
@@ -11,6 +13,11 @@
 
 static int detached_ifindices[16];
 static size_t detached_count;
+static struct querier_user_iface* last_attached_user;
+static struct mrib_user* uplink_user;
+static struct mrib_user* refreshed_user;
+static struct in6_addr refreshed_group;
+static int refresh_count;
 
 omgp_time_t omgp_time(void) {
   return 0;
@@ -52,11 +59,20 @@ int client_set(struct client* client,
 int mrib_attach_user(struct mrib_user* user, int ifindex, mrib_cb* callback) {
   (void)ifindex;
   user->cb_newsource = callback;
+  if (callback) {
+    uplink_user = user;
+  }
   return 0;
 }
 
 void mrib_detach_user(struct mrib_user* user) {
   user->iface = NULL;
+}
+
+void mrib_refresh(struct mrib_user* user, const struct in6_addr* group) {
+  refreshed_user = user;
+  refreshed_group = *group;
+  ++refresh_count;
 }
 
 int mrib_filter_add(mrib_filter* filter, struct mrib_user* user) {
@@ -88,6 +104,7 @@ int querier_attach(struct querier_user_iface* user,
   user->user.querier = querier;
   user->user_cb = callback;
   list_add_tail(&user->user.head, &querier->ifaces);
+  last_attached_user = user;
   return 0;
 }
 
@@ -105,6 +122,7 @@ void querier_detach(struct querier_user_iface* user) {
 }
 
 static void test_stale_downlink_scan(void) {
+  detached_count = 0;
   int initial[] = {20, 30};
   CHECK(proxy_set(10, initial, 2, PROXY_GLOBAL) == 0);
   CHECK(detached_count == 0);
@@ -117,7 +135,31 @@ static void test_stale_downlink_scan(void) {
   proxy_flush();
 }
 
+static struct in6_addr addr6(const char* text) {
+  struct in6_addr address;
+  CHECK(inet_pton(AF_INET6, text, &address) == 1);
+  return address;
+}
+
+static void test_membership_callback_refreshes_matching_group(void) {
+  refresh_count = 0;
+  refreshed_user = NULL;
+  uplink_user = NULL;
+  int downlink = 20;
+  CHECK(proxy_set(10, &downlink, 1, PROXY_GLOBAL) == 0);
+  CHECK(last_attached_user != NULL);
+
+  struct in6_addr group = addr6("ff3e::1234");
+  last_attached_user->user_cb(last_attached_user, &group, false, NULL, 0);
+  CHECK(refresh_count == 1);
+  CHECK(refreshed_user == uplink_user);
+  CHECK(IN6_ARE_ADDR_EQUAL(&refreshed_group, &group));
+
+  proxy_flush();
+}
+
 int main(void) {
   test_stale_downlink_scan();
+  test_membership_callback_refreshes_matching_group();
   return test_result();
 }

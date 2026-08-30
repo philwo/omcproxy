@@ -1,11 +1,37 @@
 #include "ev_stub.h"
 
 omgp_time_t stub_now = INT64_C(1) << 20;
+struct ev_fd* stub_fds[STUB_MAX_FDS];
+size_t stub_fd_count;
 
 static LIST_HEAD(stub_timers);
 
 omgp_time_t omgp_time(void) {
   return stub_now;
+}
+
+int ev_fd_add(struct ev_fd* efd, int fd, uint32_t events, ev_fd_cb* cb) {
+  (void)events;
+  efd->fd = fd;
+  efd->cb = cb;
+  efd->registered = true;
+  if (stub_fd_count < STUB_MAX_FDS) {
+    stub_fds[stub_fd_count++] = efd;
+  }
+  return 0;
+}
+
+void ev_fd_del(struct ev_fd* efd) {
+  if (!efd->registered) {
+    return;
+  }
+  efd->registered = false;
+  for (size_t i = 0; i < stub_fd_count; ++i) {
+    if (stub_fds[i] == efd) {
+      stub_fds[i] = stub_fds[--stub_fd_count];
+      break;
+    }
+  }
 }
 
 void ev_timer_cancel(struct ev_timer* timer) {

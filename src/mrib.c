@@ -200,10 +200,10 @@ static size_t mrib_find(int ifindex) {
   return i;
 }
 
-// Notify all users of a new multicast source
-static void mrib_notify_newsource(struct mrib_iface* iface,
-                                  const struct in6_addr* group,
-                                  const struct in6_addr* source) {
+// Recompute the output interfaces for a route and install it in the kernel
+static void mrib_program_route(struct mrib_iface* iface,
+                               const struct in6_addr* group,
+                               const struct in6_addr* source) {
   mrib_filter filter = 0;
   struct mrib_user* user;
   list_for_each_entry (user, &iface->users, head) {
@@ -212,6 +212,13 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
     }
   }
 
+  mrib_set(group, source, iface, filter, false);
+}
+
+// Notify all users of a new multicast source
+static void mrib_notify_newsource(struct mrib_iface* iface,
+                                  const struct in6_addr* group,
+                                  const struct in6_addr* source) {
   char groupbuf[INET6_ADDRSTRLEN];
   char sourcebuf[INET6_ADDRSTRLEN];
   inet_ntop(AF_INET6, group, groupbuf, sizeof(groupbuf));
@@ -231,7 +238,28 @@ static void mrib_notify_newsource(struct mrib_iface* iface,
     }
 
     list_add_tail(&route->head, &iface->routes);
-    mrib_set(group, source, iface, filter, 0);
+    mrib_program_route(iface, group, source);
+  }
+}
+
+void mrib_refresh(struct mrib_user* user, const struct in6_addr* group) {
+  struct mrib_iface* iface = user->iface;
+  if (!iface) {
+    return;
+  }
+
+  struct mrib_route* route;
+  list_for_each_entry (route, &iface->routes, head) {
+    if (!IN6_ARE_ADDR_EQUAL(&route->group, group)) {
+      continue;
+    }
+    char groupbuf[INET6_ADDRSTRLEN];
+    char sourcebuf[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET6, &route->group, groupbuf, sizeof(groupbuf));
+    inet_ntop(AF_INET6, &route->source, sourcebuf, sizeof(sourcebuf));
+    L_DEBUG("%s: reconciling oifs for %s from %s after membership change",
+            __FUNCTION__, groupbuf, sourcebuf);
+    mrib_program_route(iface, &route->group, &route->source);
   }
 }
 
