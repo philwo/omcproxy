@@ -75,6 +75,13 @@ static void groups_remove_group(struct groups* groups,
   --groups->group_count;
 }
 
+// Consume a batch of queried sources after a transmission attempt. An
+// unsuppressed attempt rebases the lowered deadline on the actual attempt
+// time and the remaining schedule (capped at the natural deadline), so an
+// overdue dispatch or a failed send cannot expire the source before its
+// queries were sent plus one response window. Suppressed queries must not
+// modify timers (RFC 3810 7.6.1). A skipped attempt means another querier
+// won the election: cancel the schedule and leave the timers it set alone.
 static void finish_source_batch(struct group* group,
                                 struct list_head* batch,
                                 enum groups_query_result result,
@@ -88,11 +95,16 @@ static void finish_source_batch(struct group* group,
       --source->retransmit;
     } else if (result == GROUPS_QUERY_SKIPPED) {
       source->retransmit = 0;
-    } else if (!suppress && source->include_until > now &&
-               source->include_until < source->expire_cap) {
-      source->include_until += interval;
-      if (source->include_until > source->expire_cap) {
-        source->include_until = source->expire_cap;
+    }
+    if (result != GROUPS_QUERY_SKIPPED && !suppress &&
+        source->include_until > 0 &&
+        source->include_until < source->expire_cap) {
+      omgp_time_t deadline = now + (source->retransmit + 1) * interval;
+      if (deadline > source->expire_cap) {
+        deadline = source->expire_cap;
+      }
+      if (deadline > source->include_until) {
+        source->include_until = deadline;
       }
     }
     if (source->retransmit > 0) {
@@ -134,19 +146,26 @@ static omgp_time_t expire_group(struct groups* groups,
   if (group->retransmit > 0 && group->next_generic_transmit <= now) {
     group->next_generic_transmit = 0;
 
+    bool suppress = group->exclude_until > llqt;
     enum groups_query_result result =
-        groups->cb_query ? groups->cb_query(groups, &group->addr, NULL,
-                                            group->exclude_until > llqt)
-                         : GROUPS_QUERY_SENT;
+        groups->cb_query
+            ? groups->cb_query(groups, &group->addr, NULL, suppress)
+            : GROUPS_QUERY_SENT;
     if (result == GROUPS_QUERY_SENT) {
       --group->retransmit;
     } else if (result == GROUPS_QUERY_SKIPPED) {
       group->retransmit = 0;
-    } else if (group->exclude_until > now &&
-               group->exclude_until < group->expire_cap) {
-      group->exclude_until += cfg->last_listener_query_interval;
-      if (group->exclude_until > group->expire_cap) {
-        group->exclude_until = group->expire_cap;
+    }
+
+    if (result != GROUPS_QUERY_SKIPPED && !suppress &&
+        group->exclude_until > 0 && group->exclude_until < group->expire_cap) {
+      omgp_time_t deadline =
+          now + (group->retransmit + 1) * cfg->last_listener_query_interval;
+      if (deadline > group->expire_cap) {
+        deadline = group->expire_cap;
+      }
+      if (deadline > group->exclude_until) {
+        group->exclude_until = deadline;
       }
     }
 

@@ -463,6 +463,9 @@ static void test_overdue_group_membership_stays_active(void) {
 
   stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(query_calls == 2);
+  CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(groups_get(&g, &grp) == NULL);
   CHECK(update_included);
 
@@ -487,8 +490,60 @@ static void test_overdue_source_membership_stays_active(void) {
 
   stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(query_calls == 2);
+  CHECK(groups_includes_group(&g, &grp, &s1, stub_now));
+
+  stub_advance(OMGP_TIME_PER_SECOND);
   CHECK(!groups_includes_group(&g, &grp, &s1, stub_now));
   CHECK(groups_includes_group(&g, &grp, NULL, stub_now));
+
+  groups_deinit(&g);
+}
+
+static void test_failed_suppressed_group_query_keeps_deadline(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::f8");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_TO_IN);
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_timers(&g, &grp, NULL, 0, 10 * OMGP_TIME_PER_SECOND, 2);
+  omgp_time_t lowered = stub_now + 20 * OMGP_TIME_PER_SECOND;
+
+  query_calls = 0;
+  query_result = GROUPS_QUERY_FAILED;
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  CHECK(query_suppress);
+  const struct group* group = groups_get(&g, &grp);
+  CHECK(group != NULL && group->exclude_until == lowered);
+
+  groups_deinit(&g);
+}
+
+static void test_failed_suppressed_source_query_keeps_deadline(void) {
+  setup();
+  struct in6_addr grp = addr("ff05::f9");
+  struct in6_addr s1 = addr("2001:db8::f9");
+
+  groups_update_state(&g, &grp, NULL, 0, UPDATE_IS_EXCLUDE);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_BLOCK);
+  groups_update_state(&g, &grp, &s1, 1, UPDATE_ALLOW);
+  groups_update_timers(&g, &grp, &s1, 1, 10 * OMGP_TIME_PER_SECOND, 2);
+  omgp_time_t lowered = stub_now + 20 * OMGP_TIME_PER_SECOND;
+
+  query_calls = 0;
+  query_result = GROUPS_QUERY_FAILED;
+  stub_advance(0);
+  CHECK(query_calls == 1);
+  CHECK(query_suppress);
+  const struct group* group = groups_get(&g, &grp);
+  CHECK(group != NULL);
+  if (group) {
+    const struct group_source* source;
+    group_for_each_source (source, group) {
+      CHECK(source->include_until == lowered);
+    }
+  }
 
   groups_deinit(&g);
 }
@@ -516,5 +571,7 @@ int main(void) {
   test_skipped_source_query_cancels_schedule();
   test_overdue_group_membership_stays_active();
   test_overdue_source_membership_stays_active();
+  test_failed_suppressed_group_query_keeps_deadline();
+  test_failed_suppressed_source_query_keeps_deadline();
   return test_result();
 }
